@@ -1,0 +1,141 @@
+# -*- mode: sh; -*-
+# Library: various math / number related functions
+# Dependencies: base.cfg, macros, logging, utilities
+# Author: Christopher Barry
+# License: GPLv2 or later
+#
+################################################################################
+#                  M A T H   F U N C T I O N   L I B R A R Y                   #
+################################################################################
+
+#-------------------------------------------------------------------------------
+function coin_toss()
+# Description: return 0 or 1 randomly
+# Depends: bashlib
+# API:
+# Inputs: none
+# Outputs: 0 or 1
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _val=$(gen_random_int 9)
+    (( _val < 5 )) && echo 0 || echo 1
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function gen_random_hex()
+# Description: generate a random hex number n digits long
+# Depends: bashlib
+# API:
+#  $1 - number of digits
+# Inputs:  a length
+# Outputs: a hex number
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  gen_random_hex 6
+#   FFE48A
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local -i c _count_=${1}
+    local _hexnum=
+    local -a _valid_char=( A B C D E F 0 1 2 3 4 5 6 7 8 9 )
+
+    for (( c=0; c<_count_; c++ )); do
+        _hexnum+=${_valid_char[$(gen_random_int 15)]}
+    done
+
+    echo ${_hexnum}
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function gen_random_int()
+# Description: generates a very pseudo-random integer up to a maximum value.
+# Depends: bashlib
+# API:
+#  $1 - max value
+# Inputs:
+# Outputs: a pseudo-random integer
+# Environment: ${RANDOM}
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#   gen_random_int 100
+#    16
+#-
+{
+    local _params="${@}"
+    minimal-func-init
+
+    local -i _max=${1}
+    ((_max < 1))   && { echo "0"; return 0; }
+    ((_max == 1 )) && { echo "1"; return 0; }
+
+    echo "$(((RANDOM*RANDOM) %$_max +1))"
+
+    minimal-func-return
+    return 0
+}
+##------------------------------------------------------------------------------
+
+
+#-------------------------------------------------------------------------------
+function gen_random_float()
+# Description:
+#   generates a very pseudo-random float up to a maximum value, with a
+#   set number of decimal places.
+# Depends: bashlib
+# API:
+#   $1  - max number
+#  [$2] - optional places
+# Inputs:  max value for
+# Outputs: pseudo-random value in the range of 0 to max value
+# Environment: ${RANDOM}
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#   gen_random_float 4 2
+#    3.11
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _int _dec _max=${1} _places=${2}
+    ((_max < 1)) && { echo "0"; return 0; }
+    ((_places == 0)) && {
+        _int=$(gen_random_int $_max )
+    } || {
+        _int=$(gen_random_int $((_max - 1)) )
+    }
+    local p
+    for ((p=0; p<_places; p++)); do
+        _dec="${_dec}$(gen_random_int 9)"
+    done
+
+    echo "${_int}${_dec:+.${_dec}}"
+
+    func-return
+}
+##------------------------------------------------------------------------------

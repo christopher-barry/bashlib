@@ -1,0 +1,131 @@
+# -*- mode: sh; -*-
+# bootstrap resource file: basic functions to load the rest of bashlib
+# Dependencies: base.cfg, macros, logging, utilities
+# Author: Christopher Barry
+# License: GPLv2 or later
+#
+################################################################################
+#    B  A  S  H  L  I  B     B  O  O  T  S  T  R  A  P     R  C  F  I  L  E    #
+################################################################################
+#
+
+# When part of a single user installation, this file is located in
+# ~/.bashlibrc, and should be sourced from your ~/.bashrc with
+# something similar to the following code below: (remove first '#' from each line)
+
+## initialize bashlib
+#IPATH=/where/you/installed/it/bashlib/lib
+#export IPATH
+#source ~/.bashlibrc
+
+# You'd need to edit the IPATH variable to match your installation
+# location, obviously. The above can be automatically added during
+# installation, and it's easiest and advisable to just allow the
+# installer to add it.
+
+# When part of a system wide installation, this file is located in
+# /etc/profile.d/bashlib.sh, and is loaded upon login via
+# /etc/profile.
+
+# This file contains only static functions and no configuration.
+
+# verify we can run
+function check_bash_version()
+{
+    emsg='Houston, we have a problem...
+You must use a version of the bash shell >= 4.2 to run bashlib.
+'
+    if [ -z "$BASH_VERSINFO" ]; then
+        echo >&2 "$emsg"
+        exit 1
+    fi
+    if (( ${BASH_VERSINFO[0]} >= 4 )); then
+        if (( ${BASH_VERSINFO[1]} >= 2 )); then
+            return 0
+        else
+            echo >&2 "$emsg"
+            exit 1
+        fi
+    else
+        echo >&2 "$emsg"
+        exit 1
+    fi
+}
+
+# standard lib and config searching import functions
+function ipath()
+{
+    local _ipath="${IPATH}"
+    local _d="${1%/*}" _f="${1##*/}"
+    if [[ "${_d}" != "${_f}" ]]; then
+        unset _ipath
+    else
+        unset _d
+    fi
+
+    local _p= _found=
+
+    for _p in "${_d}" ${_ipath//:/ }; do
+        [[ -d "${_p}" ]] && {
+            _found=$(find "${_p}" -type f -name "${_f}" -o -type l -name "${_f}") 2>/dev/null
+            [[ "${_found}" ]] && { echo "${_found}"; return 0; }
+        }
+    done
+}
+#
+function import()
+{
+    local _target="${1}"; shift
+    local _mod=$(ipath "${_target}")                               # module
+
+    if [[ -e "${_mod}" ]]; then
+
+        local _args="${@}"                                         # args to module, if any
+        local _path_mod="$(readlink -f "${_mod}")"                 # full path to module
+        local _path_mod_var="${_path_mod//[[:punct:][:blank:]]/_}" # module 'loaded' marker
+
+        if [[ "$(file -b ${_path_mod})" =~ ((Bourne-Again|POSIX) shell script|ASCII text) ]]; then
+
+            if [[ ! "$(eval "echo -n \${BASHLIB${_path_mod_var}}")" == "loaded" ]]; then
+
+                source "${_path_mod}" "${_args}"
+                (( $? )) && exit 1
+                declare -g BASHLIB${_path_mod_var}=loaded
+                return 0
+
+            else
+
+                echo >&2 "${_path_mod} module already loaded. skipping."
+                return 0
+
+            fi
+
+        else
+
+            echo >&2 "Importing '${_path_mod}' failed: Invalid file format"
+            exit 1
+
+        fi
+
+    else
+        [[ "${FUNCNAME[1]}" == "config" ]] || {
+            echo >&2
+            echo >&2 "Importing '${_target}' failed: File not found"
+            echo >&2 "Insure your \$IPATH is set correctly, or a correct full pathname is provided"
+            echo >&2 "For user installs, \$IPATH should be set in your ~/.bashrc"
+            echo >&2 "For system installs, \$IPATH is set via /etc/profile.d/bashlib.sh"
+            echo >&2 "Current \$IPATH is: '${IPATH}'"
+            echo >&2 "See <bashlib_dir>/INSTALL for more information"
+            echo >&2
+            exit 1
+        }
+    fi
+
+}
+#
+function config()
+{
+    import "${@}"
+}
+
+export -f check_bash_version ipath import config

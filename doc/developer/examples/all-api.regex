@@ -1,0 +1,27 @@
+# Author: Christopher Barry
+# License: GPLv2 or later
+#
+# This is an example of a regex file for use with bashdoc's -p option.
+# Comments are allowed is these files. This regex duplicates bashdoc's
+# -A option, dumping all API information from a file that adhere's to
+# bashlib's comment format, and should provide a good example of how
+# these regular expression files work.
+
+# First, any options are applied: -s, and/or -1
+#  -s skips outputting the lines that actually match, but output
+#     everything in between the matches.
+#  -1 dumps the first matching block of info, then terminates.
+
+# Then, the file being queried is read until start-regex is
+# found. Without -s, the matching line gets output, as does every
+# following line, up to and including the end-regex, if found. Without
+# -1, this will continue, dumping all matching blocks of information.
+
+# Example:
+# options   start-regex         end-regex
+#----------------------------------------
+#-1          ^#.*TODO.*$         ^#.*END_TODO.*$
+
+# options   start-regex         end-regex
+#----------------------------------------
+          ^function[[:blank:]].*$ ^#-$

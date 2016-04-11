@@ -1,0 +1,188 @@
+# -*- mode: sh; -*-
+# Library: various data structure functions
+# Dependencies: base.cfg, macros, logging, utilities
+# Author: Christopher Barry
+# License: GPLv2 or later
+#
+################################################################################
+#       D  A  T  A     S  T  R  U  C  T  U  R  E     L  I  B  R  A  R  Y       #
+################################################################################
+
+#-------------------------------------------------------------------------------
+function struct()
+# Description: creates a structured data record
+# Depends: bashlib,
+# API:
+#  $1 - type name
+#  $2 - assigned name
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  # define the structure:
+#  struct  my_record i:my_int a:my_array h:my_hash s:my_string
+#    # this creates a function body template, saving it to /dev/shm
+#  # assign the structure to a function
+#  struct my_record rec
+#    # this creates a function named rec, with the body template embedded.
+#  # set values in the structure
+#  rec my_hash[hash_key]=hash_value my_int=100
+#  # get values from the structure
+#  rec my_hash[hash_key] my_int my_array[4]
+#-
+{
+    local _params="${@}"
+    func-init
+
+    # we're defining a structure type
+    [[ "${_params}" =~ ^[[:alnum:]+][[:blank:]][ahis]:[[:alnum:]+].*$ ]] && {
+        :
+        # format a function body definition
+        # write to /dev/shm/bashlib/${0##*/}/[${instid}]/${1}
+    }
+
+    # we're creating a structure instance
+    [[ "${_params}" =~ ^[[:alnum:]+][[:blank:]][[:alnum:]+]$ ]] && {
+        :
+        # verify the struct type $1 exists.
+        # initialize a new instance of it.
+        # generate a function named $2 whose data is stored in the new
+        # instance of the structure.
+    }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function _defun()
+# Description: creates struct functions with persistent memoryfs storage
+# Depends: bashlib,
+# API:
+#  $1 - function name
+#  $2 - file containing function body
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  _defun my_new_func /dev/shm/bashlib/${0##*/}/${instid}/my_struct
+#-
+{
+    local _params="${@}"
+    func-init
+
+    # function body
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function _get()
+# Description: gets data from a struct node
+# Depends: bashlib,
+# API:
+#  $1 - node name
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  v=$(_get ${n})
+#-
+{
+    local _params="${@}"
+    func-init
+
+    # function body
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function _put()
+# Description: put data into a struct node
+# Depends: bashlib,
+# API:
+#  $1 - node name
+#  $@ - value
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  _put ${n} ${v}
+#-
+{
+    local _params="${@}"
+    func-init
+
+    # function body
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function _typedef()
+# Description: define a structure type template
+# Depends: bashlib,
+# API:
+#  $1 - type name
+#  $@ - type parameters
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  _typedef my_struct_type a:my_array h:my_hash i:my_int s:my_string
+#-
+{
+    local _params="${@}"
+    func-init
+
+    # function body
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function _init()
+# Description: initialize a new instance of a data structure
+# Depends: bashlib,
+# API:
+#  $1   - structure name
+#  $2   - instance name
+#  [$3] - instance id
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  _init
+#-
+{
+    local _params="${@}"
+    func-init
+
+    # function body
+
+    func-return
+}
+##------------------------------------------------------------------------------

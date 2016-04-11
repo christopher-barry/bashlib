@@ -1,0 +1,49 @@
+# -*- mode: sh; -*-
+#-------------------------------------------------------------------------------
+function test_elvar()
+# Description: tests the elvar function
+# Depends: bashlib
+# API:
+# n/a
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#   functest -v -i $(ipath elvar.test) test_elvar
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local mytestarray=()
+    log_fd 2 ""
+    log_fd 2 "creating an array to test: mytestarray"
+    log_fd 2 "mytestarray=( "this" "is" "a" "test" "array" )"
+    mytestarray=( "this" "is" "a" "test" "array" )
+    log_fd 2 "contents of \${mytestarray[@]} now: ( ${mytestarray[@]} )"
+
+    log_fd 2 ""
+    log_fd 2 "creating a var named myvarel, which contains 'YAY It Works'"
+    local myvarel='YAY It Works'
+    log_fd 2 "local myvarel='YAY It Works'"
+    log_fd 2 ""
+
+    log_fd 2 "adding just \${myvarel}'s *name* as another element to \${mytestarray[@]}"
+    array_append mytestarray < <(echo "myvarel")
+    log_fd 2 "array_append mytestarray < <(echo "myvarel")"
+    log_fd 2 ""
+    log_fd 2 "contents of \${mytestarray[@]} now: ( ${mytestarray[@]} )"
+
+    log_fd 2 "using: 'elvar \"mytestarray[-1]\"' to extract the value of myvarel from the array."
+    log_fd 2 "Note: -1 is always the last index of an array..."
+    log_fd 2 ""
+    log_fd 2 "and the value of \${mytestarray[-1]} is: $(elvar "mytestarray[-1]")"
+
+    _rtn=0
+
+    func-return
+}
+##------------------------------------------------------------------------------

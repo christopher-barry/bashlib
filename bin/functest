@@ -1,0 +1,170 @@
+#!/bin/bash
+# -*- mode: sh; -*-
+# functest: test tool for developing and testing functions
+# Dependencies: bashlib
+# Authors: Christopher Barry
+# License: GPLv2 or later
+#
+################################################################################
+#     B  A  S  H  L  I  B     F  U  N  C  T  I  O  N     T  E  S  T  E  R      #
+################################################################################
+
+#==============================BEGIN_USAGE==============================
+# NAME
+#   functest - used to test functions
+#
+# SYNOPSIS
+#   functest [[-v|--verbose]|[-D|--debug]] [-i func-file-to-source] [-e|-t] func-to-run args
+#   functest [-h|--help]
+#
+# DESCRIPTION
+#   Runs a function as if it was already part of a larger program by
+#   leveraging the entire bashlib framework.
+#
+# FEATURES
+#   Uses all bashlib error handling, logging and debugging functionality.
+#
+# OPTIONS
+#   BUILTINS
+#     [[-v|--verbose]|[-D|--debug]]
+#       Controls extended output verbosity level.
+#       MUST be the FIRST parameter to have any effect.
+#         -v|--verbose
+#           writes logs to screen and ~/log/program-name.log
+#         -D|--debug
+#           outputs xtrace data to ~/log/program-name.debug
+#           and enables --verbose output as well.
+#
+#     [-h | --help]
+#       Display basic and full usage information respectively and exit.
+#
+#   PROGRAM SPECIFIC
+#     [-i <source_file>]
+#       Optional file to source before running function.
+#
+#     [-e]
+#       Evaluate function under test with --eval version of try() as
+#       opposed to standard 'Execute' version. Required if you want to
+#       pass redirections into functest. Full command must be quoted
+#       to allow redirections.
+#
+#     [-t]
+#       Use standard execute version of try().
+#
+#     Without a qualifier, the function is run directly without try()
+#     as a wrapper.
+#
+# EXAMPLES
+#   functest -i myscript mynewfunc arg1 arg2 argN
+#   functest --verbose -i myscript mynewfunc arg1 arg2 argN
+#    then look in ~/log/functest.log to see debug output.
+#   functest -D -i myscript mynewfunc arg1 arg2 argN
+#    then look in ~/log/functest.debug to see debug output.
+#   functest -v -i newfile -e "newfunc args >> ./somefile"
+#
+# FILES
+#   bashlib suite
+#
+# ENVIRONMENT
+#
+# EXIT STATUS
+#   0 on success
+#   1 on failure
+#
+# AUTHORS
+#   christopher barry  <christopher.r.barry(at)gmail.com>
+#
+# SEE ALSO
+#
+#==============================END_USAGE==============================
+
+################################################################################
+#     C  O  N  F  I  G  U  R  A  T  I  O  N     A  N  D     S  E  T  U  P      #
+################################################################################
+
+# bash 4.2+ or bail
+check_bash_version || exit 1
+
+# load configuration
+config /etc/bashlib/base.cfg
+config ~/.config/bashlib/base.cfg
+
+# standard bashlib includes
+import macros
+import logging
+import utilities
+# additional bashlib includes.
+# uncomment them to activate.
+import remote
+import net
+import math
+
+# builtin verbosity levels
+case "${1}" in
+    -v|--verbose) _VERBOSE_=true; shift ;;
+    -D|--debug)   _DEBUG_=true;   shift ;;
+esac
+
+# initialize logging, debug, and program subsystems
+log_init; log_debug_init; _params="${@}"; prog-init
+
+# builtin help
+show_help "${@}"
+
+################################################################################
+#               P  R  O  G  R  A  M     B  E  G  I  N  S                       #
+################################################################################
+
+#-------------------------------------------------------------------------------
+function __main__()
+# Description: functest primary function
+# Depends: bashlib
+# API:
+#  [-t|-e] - run try or --eval version of try
+#  $@ - func args...
+# Inputs: function to test
+# Outputs: tested function output
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#   main "${@}"
+#-
+{
+    local _params="${@}"
+    func-init
+
+    case ${1} in
+        -e)
+            shift
+            try --eval "${@}"
+            _rtn=$(get_status)
+            ;;
+        -t)
+            shift
+            try "${@}"
+            _rtn=$(get_status)
+            ;;
+        *)
+            ${@}
+            _rtn=$(get_status)
+            ;;
+    esac
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+# dump everything
+DEBUG_DROP_LINES=
+
+# source file if needed
+[[ "${1}" == "-i" ]] && {
+    import ${2} || { _rtn="$?"; error-p; }
+    shift 2
+}
+
+# run it
+__main__ "${@}" || _rtn=${?}
+prog-exit

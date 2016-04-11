@@ -1,0 +1,12 @@
+# single_user_files:
+#   list of files in source:target format that install uses when
+#   installing bashlib int a user's directory.
+#   * source is relative to the installed bashlib dir
+#   * target is relative to ~/
+# Dependencies: bashlib
+# Authors: Christopher Barry
+# License: GPLv2 or later
+# See Also: single_user_links, system_wide_{files,links}
+
+# source filename:target filename
+bashlibrc:.bashlibrc

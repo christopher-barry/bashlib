@@ -1,0 +1,14 @@
+# system_wide_links:
+#   list of symlinks in linkname:source filename format that install
+#   uses when installing bashlib system wide.
+#   * linkname is relative to bashlib dir or fullpath
+#   * source filename is relative to bashlib dir
+# Dependencies: bashlib
+# Authors: Christopher Barry
+# License: GPLv2 or later
+# See Also: single_user_{links,files}, system_wide_files
+
+# linkname:source filename
+/etc/bashlib/base.cfg:etc/base.cfg
+bin/functest:bin/functest
+bin/bashdoc:bin/bashdoc

@@ -1,0 +1,198 @@
+#!/bin/bash
+# -*- mode: sh; -*-
+# m2p: securely sync local files to phone over wifi
+# Dependencies: bashlib
+# Authors: Christopher Barry
+# License: GPLv2 or later
+#
+
+#=================================BEGIN_USAGE===================================
+# NAME
+#   m2p - securely sync local files to phone over wifi
+#
+# SYNOPSIS
+#   m2p [builtins] -d|-f rexex host-last-ip-quad-or-name
+#
+# DESCRIPTION
+#   m2p uses rsync over ssh to copy a regex selection of files to the
+#   phone.
+#
+# FEATURES
+#   You'll need an ssh server running on your phone, and have keys
+#   installed.
+#
+# OPTIONS
+#   BUILTINS
+#     [[-v|--verbose]|[-D|--debug]]
+#       Controls extended output verbosity level.
+#       MUST be the FIRST parameter to have any effect.
+#         -v|--verbose
+#           writes logs to screen and ~/log/m2p.log
+#         -D|--debug
+#           outputs xtrace data to ~/log/m2p.debug
+#           and enables --verbose output as well.
+#
+#     [-h | --help]
+#       Display basic and full usage information respectively and exit.
+#
+#   PROGRAM SPECIFIC
+#     -d|-f regex
+#       Find either directories or files matching regex, respectively
+#
+# EXAMPLES
+#   m2p -d 'Elton' myphone.home.org
+#   m2p -f 'Sweet' 108
+#   m2p --help
+#
+# FILES
+#
+# ENVIRONMENT
+#   base.cfg contains basic configuration environmental variables, and
+#   instantates all library functions.
+#
+#   IMPORTANT: set directory/IP variables below in this script
+#
+# EXIT STATUS
+#
+# AUTHORS
+#   christopher barry <christopher.r.barry(at)gmail.com>
+#
+# SEE ALSO
+#
+#==================================END_USAGE====================================
+
+# bash 4.2+ or bail
+check_bash_version || exit 1
+
+# standard config locations
+config /etc/bashlib/base.cfg
+config ~/.config/bashlib/base.cfg
+
+# standard bashlib includes
+import macros
+import logging
+import utilities
+# additional bashlib includes.
+# uncomment them to activate.
+#import net
+#import remote
+
+# builtin verbosity levels
+case ${1} in
+    -v|--verbose) _VERBOSE_=true; shift ;;
+    -D|--debug)   _DEBUG_=true;   shift ;;
+esac
+
+# initialize logging, debug, and program subsystems
+log_init; log_debug_init; _params="${@}"; prog-init
+
+# builtin help
+show_help "${@}"
+
+################################################################################
+#                C  O  N  F  I  G  U  R  A  T  I  O  N                         #
+################################################################################
+#################   Modify these values as required  ###########################
+################################################################################
+
+# base network
+ip_network="192.168.1."
+
+# ssh port
+ssh_port='22022'
+
+# IMPORTANT: pay attention to '/' char use below #
+
+# phone dirs
+dst_basedir=/sdcard
+dst_musicdir=Music/
+
+# desktop dirs
+src_basedir=/home/cbarry
+src_musicdir=music
+
+################################################################################
+#               P  R  O  G  R  A  M     B  E  G  I  N  S                       #
+################################################################################
+
+# hacky arg parsing...
+(( ${#} < 2 )) || (( ${#} > 3 )) && { log "bad args: '${@}'"; exit 1; }
+
+[[ "${1}" == "-f" ]] && {
+    type=f; shift;
+} || {
+    [[ "${1}" == "-d" ]] && {
+        type=d; shift;
+    } || :
+}
+
+regex="${1}"; shift
+
+is_numeric ${1//\./} && {
+    # ip address
+    ip_host="${1}"
+    host=${ip_network}${ip_host}
+} || {
+    # dns name
+    host="${1}"
+}
+
+[[ "${host}" == "" ]] && { log "host not specified. aborting."; exit 1; }
+
+# array for found songs
+declare -a mlist
+
+#-------------------------------------------------------------------------------
+function search_music()
+# Description: finds a list of songs based on a search string
+# Depends: bashlib
+# API:
+#  $1 - -d|-f search for a directory or a filename
+#  $2 - regular expression pattern to search
+# Outputs: an array of song filenames
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  search_music -f 'Elton'
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local type=${1} regex="${2}"
+
+    array_append mlist < <(find . -type ${type} -print | grep ${regex}) || {
+        _rtn=$(get_status)
+        E="Gathering music list failed"
+        error-f
+    }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+declare -a mlist=()
+
+cd ${src_basedir}/${src_musicdir} || { _rtn=$? E="invalid source directory"; error-p; }
+
+search_music ${type:=f} "${regex}" || { _rtn=$? E="search error"; error-p; }
+
+(( ${#mlist[@]} > 0 )) || { echo "No matches found"; error-p; }
+
+[[ "${type}" == "f" ]] && declare _songs=songs || declare _songs=albums
+
+log_fd 2 "The following $_songs are slated to be transfered:"
+log_fd 2 ""
+sort -n < <(echo -e "${mlist[@]/%/\\n}" | trim)
+log_fd 2 ""
+read -p "Continue? [y/N] " key
+[[ "${key^}" == "Y" ]] || { log "copy aborted"; error-p; }
+
+try --eval rsync --stats --progress -crRe \'ssh -p ${ssh_port}\' "${mlist[@]// /\ }" ${host}:${dst_basedir}/${dst_musicdir} 2>&1 || {
+    _rtn=$(get_status)
+    E="Error transferring data"
+    error-p
+}
+
+prog-exit

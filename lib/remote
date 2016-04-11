@@ -1,0 +1,172 @@
+# -*- mode: sh; -*-
+# Library: remote access and scripting helper functions
+# Dependencies: base.cfg, macros, logging, utilities
+# Author: Christopher Barry
+# License: GPLv2 or later
+#
+################################################################################
+#     R  E  M  O  T  E     F  U  N  C  T  I  O  N     L  I  B  R  A  R  Y      #
+################################################################################
+
+#-------------------------------------------------------------------------------
+function find_symbol_names()
+# Description:
+#  search for symbol names in the environment using regular expressions.
+# Depends: bashlib
+# API:
+#  $1 - <-alias|-array|-exported|-function|-hash|-integer|-readonly|-regular>
+#  $@ - list of regular expressions
+# Inputs:       list of regex
+# Outputs:      names of all matching symbols (functions, arrays, vars, etc.)
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#   find_sybmol_names -f "install_.*" "log_.*"
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _type_="${1##*-}"; shift
+
+    [[ "${_type_}" =~ alias|array|exported|function|hash|integer|readonly|regular ]] && {
+        [[ "${BASH_ALIASES[get-env-${_type_}-names]}" ]] && {
+            eval "${BASH_ALIASES[get-env-${_type_}-names]}" | egrep  "^$(echo "${@}" | sed 's/ /$|^/g')$"
+        }
+    }
+    :
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function expand_symbol_names()
+# Description:
+#  Expand symbol names into their full, quoted values for
+#  re-instantiation remotely. Functions and vars are returned as they
+#  are defined. Aliases, however, are prefixed with 'alias ' to enable
+#  simpler, automatic instantiation remotely.
+# Depends: bashlib
+# API:
+#  $1 - <-alias|-array|-exported|-function|-hash|-integer|-readonly|-regular>
+#  $@ - list of regular expressions
+# Inputs:       list of regex
+# Outputs:      names of all matching symbols (functions, arrays, vars, etc.)
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _type_=${1}; shift
+    local -a _found_names=()
+    local -i n=
+
+    array_append _found_names < <(find_symbol_names ${_type_} "${@}") || { _rtn=$?; error-f; }
+
+    for (( n=0; n<${#_found_names[@]}; n++ )); do
+        case ${_type_} in
+            -alias)
+                alias -p | grep "^alias[[:blank:]]${_found_names[n]}=.*$"
+                ;;
+            -function)
+                declare -f ${_found_names[n]}
+                ;;
+            *)
+                declare -p ${_found_names[n]} | range "[[:blank:]]" 2
+        esac
+    done || _rtn=${ENO_TRACE}
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function exec_on()
+# Description: execute commands on a remote host
+# Depends: bashlib, ssh
+# API:
+#  $1 - remote hostname to run commands on
+#  $@ - command and args to execute remotely
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    func-init
+
+    # function body
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+
+:<<'EOF'
+
+#-------------------------------------------------------------------------------
+# stripped down log for remote use
+function log_lite()
+{
+    # stripped down log function for remote operation
+    cat <<<"log () { [[ \${#} -eq 0 ]] || echo >&2 \"\${*}\"; return 0; }"
+    return 0
+}
+
+#-------------------------------------------------------------------------------
+# method to source a file from a remote host
+function netdot()
+{
+    # $1  - remote host
+    # $2+ - remote file(s) to source locally
+    # usage:
+    # source <(netdot user@adminserver file1 /usr/local/bin/file2 finleN || exit 1) || exit 1
+    local _target="${1}"; shift
+    local -a _files=( "${@}" )
+
+    ssh ${_target} "for f in ${_files[@]}; do [[ -e \${f} ]] && cat \${f}; done" || return 1
+
+    return 0
+}
+
+# test functions
+##------------------------------------------------------------------------------
+# test netdot function
+function test_netdot()
+{
+
+    # this all happens localhost
+    # create some files to source
+    for x in {0..9}; do
+        echo "myvar${x}='some data from myvar${x}'" >/tmp/myvar${x}
+        myfilearray[${x}]="/tmp/myvar${x}"
+    done
+
+    # ssh in and source all the files
+    source <(netdot localhost "${myfilearray[@]}")
+
+    # see if we got the vars in the env
+    echo "searching local environment for remotely sourced vars..."
+    set | grep 'myvar[[:digit:]+]=.*$'
+
+    # cleanup
+    rm "${myfilearray[@]}"
+    unset "${myfilearray[@]##*/}" myfilearray
+
+}
+
+
+EOF

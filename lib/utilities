@@ -1,0 +1,2040 @@
+# -*- mode: sh; -*-
+# Library: various utility functions
+# Dependencies: base.cfg, macros, logging
+# Author: Christopher Barry
+# License: GPLv2 or later
+#
+################################################################################
+#    U  T  I  L  I  T  Y     F  U  N  C  T  I  O  N     L  I  B  R  A  R  Y    #
+################################################################################
+
+#-------------------------------------------------------------------------------
+function verify_argc()
+# Description: verifies the correct number of args are present
+# Depends: bashlib
+# API:
+#  $1   - $# number of args to test
+#  $2   - minimum number of args, or if no max spec'd, the exact number required
+#  [$3] - maximum number of args
+# Notes: If no maximum is specified, the number of arguments MUST equal minimum
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#   used to test if the number arguments to a function are correct
+#    verify_argc $# 2 4 || { _rtn=1 E="${_err} ${FUNCNAME}: invalid argument count"; error-f; }
+#-
+{
+    local _params="${@}"
+    func-init
+
+    (( $# < 2 )) || (( $# > 3 )) && { _rtn=1 E="${FUNCNAME}: bad number of args to test"; error-f; }
+
+    local -i _num=${1}
+    local -i _min=${2}
+    local -i _max=${3:-${_min}}
+    (( _max == 0 )) && _max=${_min}
+    (( _min > _max )) && { _rtn=1 E="${FUNCNAME}: invalid min max arg spec"; error-f; }
+    (( _num >= _min )) && (( _num <= _max )) && _rtn=0 || _rtn=${ENO_TRACE}
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+
+#-------------------------------------------------------------------------------
+function evar()
+# Description: return the value of a var name
+# Depends:
+# API:
+#  $1 - var name to resolve to its value
+# Examples:
+#  echo $(evar "myvar")
+#  echo $(evar "myarray[@]")
+#  echo $(evar "#myarray[@]")
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    minimal-func-init
+
+    [[ ${#} -gt 0 ]] || return
+    eval "printf %s'\n' \"\${${@}}\""
+    #eval "echo -n \"\${"${*}"}\""
+
+    minimal-func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function elvar()
+# Description: return the value of an array element varname (varel)
+# Depends: evar()
+# API:
+#  $1 - array name[index] of varel to resolve to its value
+# Examples:
+#  myvarel="hello world"
+#  myarray[4]=myvarel
+#  echo $(elvar "myarray[4]")
+#  hello world
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    minimal-func-init
+
+    [[ ${#} -gt 0 ]] && [[ "${1}" =~ ^[_[:alnum:]]+\[([\-]{1}|)[[:digit:]]+\]$ ]] || return 1
+    evar "$(evar "${1}")"
+
+    minimal-func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function if_defined()
+# Description: execute function if it is defined, skip otherwise
+# API:
+#  $1 - function name to test existance of.
+# Example:
+#  if_defined myfunc arg1 arg2 .. argn
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _f_=${1}; shift
+    local _args_="${@}"
+    is_function ${_f_} && {
+        ${_f_} ${_args_} || { _rtn=${?} E="${_f_} "${_args_}" failed."; error-f; }
+    } || {
+        _rtn=${ENO_TRACE}
+    }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function get_stdin()
+# Description: get stdin unbuffered with a timeout
+# Depends:
+#  stdbuf, part of Debian's coreutils package
+# API:
+#  $1 - optional numeric timeout value in seconds.
+#  without $1, looks global ${BUFFER_WAIT} timeout value, and if
+#  ${BUFFER_WAIT} is unset, defaults to 100 second.
+# Examples:
+#   See trim() or undup()
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    minimal-func-init
+
+    local _wait_=${1} # optional timeout value
+    local _stdin=
+    while read -t ${_wait_:-${BUFFER_WAIT:-100}} _stdin
+    do
+        [[ "${_stdin}" != "" ]] && echo "${_stdin}"
+    done < <(stdbuf -i0 -o0 -e0 cat -)
+
+    minimal-func-return
+}
+##------------------------------------------------------------------------------
+
+#------------------------------------------------------------------------------
+function undup()
+# Description: string filter that replaces multiples of $2 with one $2
+# API:
+#  $1 - sed delimiter (changable to avoid conflict)
+#  $2 - char
+#  $3 - string to unduplicate or stdin
+# Examples:
+#   echo this///is/a///bad/path | undup , /
+#   undup , / "${my_string}"
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _delim_=${1}
+    local _char_=${2}
+    local _str_=
+
+    [[ ${#_delim_} == 1 && ${#_char_} == 1 ]] || {
+        echo "Usage: undup <delim> <dup_char> 'string'"
+        echo "- OR -"
+        echo "some_process | undup <delim> <dup_char>"
+        return 1
+    }
+    shift 2
+
+    _str_="${*:-$(get_stdin)}"
+    [[ "${_str_}" ]] && {
+        echo "${_str_}" | sed "s${_delim_}${_char_}\+${_delim_}${_char_}${_delim_}g"
+    }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function trim()
+# Description:
+#  by defaultm remove whitespace from both ends of a string, or if
+#  multi-line data is piped in, remove blank lines as well.
+#  if -F <delim> is used, removes delim from both ends of the line.
+# API:
+#  [$1] - -F <delim>
+#  [$*] - string to trim, or stdin
+# Examples:
+#  echo "string" | trim
+#  trim " my string   "
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _delim_=
+    local _str_=
+
+    [[ "${1}" == "-F" ]] && {
+        _delim_="${2}"
+        shift 2
+    }
+
+    _str_="${*:-$(get_stdin)}"
+
+    [[ "${_str_}" ]] && {
+        [[ "${_delim_}" ]] && {
+            echo "${_str_}" | sed -e "s/^${_delim_}*//" -e "s/${_delim_}*$//"
+        } || {
+            echo "${_str_}" | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//'
+        }
+    }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function range()
+# Description: output range of fields, using zeroth-based indexing.
+# Depends: bashlib,
+# API:
+#  $1 - delimeter
+#  $2 - start[-stop] as j[-k]. no k, k=NF
+#  $3 - string to parse (or stdin)
+#
+# Note: if stop index is less than start index, the stop index is reset
+#       to the number of fields in the string.
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  range ":" 2-4 "zero:one:two:three:four:five:six"
+#  two:three:four
+#
+#  range ":" 2-1 "zero:one:two:three:four:five:six"
+#  two:three:four:five:six
+#
+#  # use POSIX regex class notation for passing space delimeter
+#  echo "zero one two three four five six" | range "[[:blank:]]" 2-4
+#  two three four
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _delim_=${1}
+    local -a _range_=( $(echo ${2//-/ }) )
+    shift 2
+
+    local -i _start_idx=${_range_[0]}
+    [[ ${_range_[1]} ]] && {
+        local -i _end_idx=${_range_[1]}
+    } || {
+        local -i _end_idx=-1
+    }
+
+    local -i _pos=${_start_idx}
+    local -i _offset=
+    local _offset_found=
+
+    local -a _ta=()
+    readarray _ta < <(tokenize ${_delim_} "${@:-$(get_stdin)}")
+
+    # determine correct offset
+    until [[ ${_offset_found} ]]; do
+
+        (( _end_idx < _pos )) && {
+            _offset=$(( (${#_ta[@]} - _pos) + 1 ))
+            _offset_found=1
+            continue
+        }
+
+        (( _end_idx == _pos )) && {
+            _offset=1
+            _offset_found=1
+            continue
+        }
+
+        (( _end_idx > _pos )) && {
+            _offset=$(( (_end_idx - _pos) + 1 ))
+            _offset_found=1
+            continue
+        }
+
+    done
+
+    [[ "${_delim_}" == "[[:blank:]]" ]] && {
+        echo ${_ta[@]:${_pos}:${_offset}}
+    } || {
+        echo ${_ta[@]:${_pos}:${_offset}} | tr " " ${_delim_}
+    }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function clean_cat()
+# Description: cats config-like files with comments and blank lines removed
+# Depends: bashlib
+# API:
+#  $1 - input_file
+#  $2 - any additional regexes to strip
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    minimal-func-init
+
+    local _fn="${1}"; shift
+    local _regex="^$(echo "#.*" "[[:blank:]]*" "${@}" | sed 's/ /$|^/g')$"
+    is_readable_file ${_fn} || { _rtn=1; error-f; }
+    egrep -v "${_regex}" "${_fn}"
+
+    minimal-func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function tokenize()
+# Description:
+#  split the string on the delimiter.
+# API:
+#  $1 - delimiter
+#  $2 - delimited list
+# Examples:
+#  path_array=( $(tokenize ":" "${PATH}") )
+#  path_array=( $(cat  "${PATH}" | tokenize ":") )
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    local _params="${@}"
+    func-init
+
+    (( $# >= 1 )) || { _rtn=1 E="Error: bad args"; error-f; }
+    local _delim_=
+    local _str_=
+
+    _delim_=${1}; shift
+    _str_="${*:-$(get_stdin)}"
+
+    [[ "${_str_}" ]] && {
+        echo "${_str_}" | tr "${_delim_}" "\n"
+    }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function readhash()
+# Description:
+#  Generates a hash from key/value pairs on stdin. Behaves similarly
+#  to the 'readarray' builtin.
+# API:
+#  $1   - associative array (hash) name (creates as global if undefined)
+#  [$2] - key/value delimiter character (defaults to =)
+#  stdin - key/value pair per line
+# Example:
+#  local -A myhash
+#  readhash myhash < key_equals_val.txt
+#   -OR-
+#  readhash myhash ":" < <(generate_key_colon_val_output_function)
+#   -OR-
+#  generate_kv | readhash myhash
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _hashname_=${1}
+    local _delim_=${2:-=}
+
+    is_hash ${_hashname_} || declare -g -A ${_hashname_}
+
+    local oIFS="${IFS}"
+    local IFS="${_delim_}"
+    local _key=
+    local _val=
+
+    while read _key _val; do
+        eval "${_hashname_}["${_key}"]=\"${_val}\""
+    done < <(get_stdin 5)
+
+    IFS="${oIFS}"
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function gen_opt_str_hash_kv()
+# Description:
+#  Helps create hash assignments of the letters of an options string whose
+#  values are the numeric index of their positions in the string.
+#  See 'get_options' function in this file for usage.
+# API:
+#  $1 - option string in getopts format
+# Example:
+#  local -A myhashname
+#  readhash myhashname <  <(gen_opt_str_hash_kv "${_opt_str_}")
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _str_=$(echo "${1}" | tr -d :)
+
+    local -i i=
+    for (( i = 0; i < ${#_str_}; i++ )); do
+        echo "${_str_:${i}:1}=${i}"
+    done
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function convert_long_options()
+# Description: converts long option namess into short ones for get_options()
+# Depends:
+#  On two pre-set synchronized arrays of long and short options.
+# API:
+#  $1 - long-opt-array-name
+#  $2 - short-opt-array-name
+#  $3 - "all options and params"
+#        Note: passing just the names of the option array variables.
+# Output: The entered commandline ($3+) converted to use short options.
+# Examples:
+#      my_long_opts=(--this --is --the --long --optionlist) # long option names
+#     my_short_opts=( -t     -i    -h   -l     -o         ) # short option names
+#    all_short_opts=( $(convert_long_options my_long_opts my_short_opts "${@}") )
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local -a _l=( $(evar "${1}[@]") ); shift
+    local -a _s=( $(evar "${1}[@]") ); shift
+    (( ${#_l[@]} == ${#_s[@]} )) || { echo "mismatched options arrays"; return 1; }
+    local _o="${@}"
+
+    local -i i=
+    for (( i = 0; i < ${#_l[@]}; i++ )); do
+        _o=${_o//"${_l[i]}"/"${_s[i]}"}
+    done
+
+    printf %s'\n' ${_o}
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function get_user_input()
+# Description: get input from user
+# Depends: bashlib,
+# API:
+#  $1   - "prompt"
+#  [$2] - default
+#  [$@] - allowed-regexes
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  case-sensitive, single char entry usage:
+#    _uinput=$(get_user_input "[F]robulate, [T]hingy, Un[s]ee" F T s)
+#  case-insensitive, single char entry usage:
+#    _mychoice="$(get_user_input "[T]his, T[h]at, [O]ther" h H t T o O)"
+#  any input allowed, blank uses default:
+#    _myinput="$(get_user_input "Tell me what you're thinking" "very cool widget")"
+#  anything but blank input allowed:
+#    _myinput="$(get_user_input "Tell me what you're thinking")"
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _prompt_="${1}"
+    shift
+
+    local _default_="${1}"
+    shift
+    [[ "${_default_}" ]] && {
+        local _defentry="[${_default_}]: "
+    } || {
+        local _defentry=
+    }
+
+    local _allowed_regex_="${@}"
+    (( "${#_allowed_regex_}" )) && {
+        local _regex="^$(echo "${_default_}" "${_allowed_regex_}" | sed 's/ /$|^/g')$"
+    } || {
+        local _regex="^.*$"
+    }
+
+    local _input=
+    log_fd -n 2 "${_prompt_}: ${_defentry}"
+    read _input
+
+    [[ "${_input:-${_default_}}" ]] && [[ "${_input:-${_default_}}" =~ ${_regex} ]] && {
+        log_fd 1 "${_input:-${_default_}}"
+    } || {
+        log_fd 2 "Invalid input. Please try again."
+        get_user_input "${_prompt_}" "${_default_}" ${@}
+    }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function get_options()
+# Description: Extensible wrapper leveraging getopts.
+# API:
+# $1 - executable_name:        The main function to run.
+# $2 - long_opt_array_name:    The name of the array holding the long option names.
+# $3 - short_opt_array_name:   The name of the array holding the short option names.
+# $4 - getopts_option_string:  In getopts option string format.
+# $@ - all options and params to $1, e.g. it's command line.
+#    e.g.: get_options func_to_run lng_arr shrt_arr "getopts_string" "func_cmdline"
+# Examples:
+#    #!/bin/bash
+#    # include these libs, then define your options in
+#    # synchronized arrays of long and short options.
+#    longopts=( --get-thingy --frobulate --unsee )
+#    shortopts=(     -t       -f          -u     )
+#
+#    # define what getopts expects as the option list. an initial ':' is unneeded.
+#    opt_string="t:fu"
+#
+#    # all your function definitions, etc...
+#
+#    # define main function
+#    main() { echo "do stuff with these arrays ${@}"; }
+#
+#    # then run as:
+#    get_options main longopts shortopts "${opt_string}" "${@}"
+#
+#    get_options wraps everything except some required initial setup.
+#
+# Returns:
+#  0  on success
+#  !0 on failure
+#-
+{
+    local _params="${@}"
+    func-init
+
+    (( $# > 4 )) || { _rtn=1 E="bad args: '${*}'"; error-f; }
+    local _cmd_=${1}
+    local _long_=${2}
+    local _short_=${3}
+    local _opt_str_=${4}
+    shift 4
+
+    # Convert every option entered on command line to short option
+    # format.  Long and short arrays are passed by reference. These
+    # array names were passed into get_options.
+    local -a _${_cmd_}_cmdline
+    readarray _${_cmd_}_cmdline < <(convert_long_options "${_long_}" "${_short_}" "${@}")
+
+    # Create a hash to keep any options entered out-of-order on the
+    # command line in ${_opt_str_} order.  This is a handy feature
+    # which can be exploited to simplify options parsing and error
+    # handling later, by using an array mask method to quickly test
+    # what option combinations are valid.
+    # See array_mask() for more info.
+    local -A _${_cmd_}_opt_hash
+    readhash _${_cmd_}_opt_hash < <(gen_opt_str_hash_kv "${_opt_str_}")
+
+    # Create a new indexed array named  _${_cmd_}_opts
+    # size it to contain all possible option args, and initialize all
+    # elements to the generated unique value '${_empty}', defaulting to
+    # global var ${EMPTY_ARG} if set.
+    local _empty=${EMPTY_ARG:-$(gen_jiffies)}
+    local -a _${_cmd_}_opts
+    readarray _${_cmd_}_opts < <(array_init $(evar "#_${_cmd_}_opt_hash[@]") ${_empty})
+
+    # Ignore getopts error noise, and init local getopts options index
+    local -i OPTERR=0 OPTIND=0
+
+    # active option character
+    local _opt=
+
+    # Build up an array of selected options
+    while getopts "${_opt_str_}" _opt $(evar "_${_cmd_}_cmdline[@]")
+    do
+        local -a _${_cmd_}_opts[$(evar "_${_cmd_}_opt_hash[${_opt}]")]="${OPTARG:-1}"
+    done
+    shift $((${OPTIND}-1))
+
+    # Create the array mask
+    local -a _${_cmd_}_mask
+    readarray _${_cmd_}_mask < <(array_mask _${_cmd_}_opts ${_empty})
+
+    # Call ${_cmd_} function with referenced arrays
+    #  $1 - Processed opt args array :: _${_cmd_}_opts
+    #  $2 - Generated opt mask array :: _${_cmd_}_mask
+    #  $3 - Short opts cmdline array :: _${_cmd_}_cmdline
+    ${_cmd_} _${_cmd_}_opts  _${_cmd_}_mask _${_cmd_}_cmdline
+    _rtn=$(get_status)
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function try()
+# Description: execute and log a simple command
+# Depends: logging library is loaded
+# API:
+#  [$1] - optional '--eval' evaluates the command and args.
+#  $*   - normally directly executes command and args.
+# Examples:
+#  try my_command ${args} || return ${?}
+#  try --eval my_command ${args} || return ${?}
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    local _params="${@}"
+    func-init
+
+    [[ "${1}" == "--eval" ]] && {
+        shift
+        # evaluate command and args
+        is_true ${_VERBOSE_} && log "Evaluating: ${*}" || :
+        eval "${*}" | log
+        _rtn=$(get_status)
+    } || {
+        # run command and args
+        is_true ${_VERBOSE_} && log "Executing: ${*}" || :
+        ${*} | log
+        _rtn=$(get_status)
+    }
+
+    (( _rtn == 0 )) && {
+        is_true ${_VERBOSE_} && log "${*} completed successfully." || :
+    } || :
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function show_help()
+# Description: displays help if either -h or --help is in the input string
+# Depends: bashlib
+# API:
+#  $1 - input string
+# Inputs: string, typically "$@" from commandline
+# Outputs: terse or detailed help
+# Environment: n/a
+# Returns:
+#  exit 0   if help is displayed
+#  return 0 if not
+# Examples:
+#  show_help "${@}"
+#-
+{
+    local _params="${@}"
+    minimal-func-init
+
+    [[ "${_params}" =~ ((\ |^)-h(\ |$)|(\ |^)--help(\ |$)) ]] && {
+        usage ${BASH_REMATCH[1]} ${0}
+        exit 0
+    }
+
+    minimal-func-return
+    return 0
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function usage()
+# Description: output bashlib bash_template header data when -h or --help are the parameter
+# Depends: bashlib
+# API:
+#  $1 - <-h|--help> -h is minimal usage, --help if full usage.
+#  $2 - full path of script to get usage data from
+# Inputs: none
+# Outputs: script header info
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  usage ${1} ${0}
+#  usage --help ~/bin/myscript
+#-
+{
+    local _params="${@}"
+    func-init
+
+    # function body
+    (( $# == 2 )) || { _rtn=1 E="bad args '${*}'"; error-f; }
+    local begin_regex=
+    local end_regex=
+    local _scriptfile=
+    local _opts_done=
+    until [[ ${_opts_done} == 1 ]] ; do
+        case "${1}" in
+
+            "-h")
+                shift
+                begin_regex='^.*SYNOPSIS$'
+                end_regex='^.*DESCRIPTION$'
+                ;;
+
+            "--help")
+                shift
+                begin_regex='^.*====+BEGIN_USAGE===+$'
+                end_regex='^.*====+END_USAGE===+$'
+                ;;
+
+            *)
+                _opts_done=1
+                _scriptfile=${1}
+                ;;
+        esac
+    done
+
+    (( $(get_status) )) || {
+        case "${begin_regex}" in
+
+            '^.*SYNOPSIS$')
+                show_embedded_comments -s -1 "${begin_regex}" "${end_regex}" ${_scriptfile}
+                :
+                ;;
+
+            '^.*====+BEGIN_USAGE===+$')
+                LB_COLS=60 log_banner centered ${_scriptfile}
+                show_embedded_comments -s -1 "${begin_regex}" "${end_regex}" ${_scriptfile}
+                :
+                ;;
+
+            *)
+                _rtn=1
+                ;;
+        esac
+    }
+
+    _rtn=$(get_status)
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function show_embedded_comments()
+# Description: use to display specific formatted comment blocks.
+# Depends: readlink
+# API:
+#  [$1] - optional '-s' to skip displaying the markers
+#  [$2] - optional '-1' to exit after first match
+#  $1 - begin embedded comment marker
+#  $2 - end embedded comment marker
+#  $3 - file to parse
+# Example:
+#  show_embedded_comments -s '^#----*\$' '^#-\$' ./bashlib/utilities
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    local _params="${@}"
+    func-init
+
+    # process options
+    local opts_done=
+    until [[ ${opts_done} == 1 ]]; do
+        case "${1}" in
+            "-s")
+                shift
+                local _skip_markers=1
+                ;;
+            "-1")
+                shift
+                local _one_output=1
+                ;;
+            *)
+                opts_done=1
+                ;;
+        esac
+    done
+
+    local _begin_="${1}"
+    local _end_="${2}"
+    local _the_script_=${3}
+
+    local -a _atts=()
+    local _atts_filetype= _atts_error=
+
+    get_file_attributes "${_the_script_}" _atts
+
+    [[ "${_atts[@]}"  =~ read ]] || _rtn=1
+    [[ "$(elvar "_atts[-1]")" =~ ((^Bourne-Again|^POSIX) shell script.*$|ASCII text.*$) ]] || _rtn=1
+    (( _rtn == 0 )) || E="${_atts[-1]}"
+
+    (( _rtn == 0 )) && {
+        local _state=
+        local _prev_state=
+        while read line; do
+            [[ "${line}" =~ ${_begin_} ]] && _state=start || :
+            [[ "${line}" =~ ${_end_} ]]   && _state=stop  || :
+            case ${_state} in
+                start)
+                    [[ "${_skip_markers}" ]] || echo "${line##\#}"
+                    _state=started
+                    _prev_state=
+                    ;;
+                started)
+                    echo "${line##\#}"
+                    _prev_state=start
+                    ;;
+                stop)
+                    [[ "${_prev_state}" == "start" ]] || continue
+                    [[ "${_skip_markers}" ]] || echo "${line##\#}"
+                    [[ "${BASHDOC_SEPARATOR}" ]] && echo -e "\\n${BASHDOC_SEPARATOR}\\n" || :
+                    _state=stopped
+                    _prev_state=started
+                    ;;
+                stopped)
+                    [[ ${_one_output} ]] && break || :
+                    continue
+                    ;;
+            esac
+        done < <( cat ${_the_script_}; :; )
+    }
+    :
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function get_status()
+# Description:
+#  Gets the last pipeline's cummulative status
+# API:
+#  _rtn=$(get_status)
+#  return $(get_status)
+#  (( $(get_status) )) && { foo; } || { bar; }
+# Outputs:
+#  sum of all exit status values in the last pipeline operation plus
+#  any integer value currently in calling function local var '${_rtn}'
+# Returns:
+#  0 always
+#-
+{
+    echo $(( ${PIPESTATUS[@]/%/+} _rtn ))
+    return 0
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function get_file_attributes()
+# Description: gets all relevent attributes of a file
+# Depends: bashlib
+# API:
+# [$1] - -c|--canonicalize - use 'readlink -m' and test the final filename
+#  $1 - name of file to test
+#  $2 - arrayname to hold discovered attributes
+# Inputs: n/a
+# Outputs: array of attributes with the last element of the array being a varname
+#          containing the description of the content-type of the file.
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  declare -a _attributes_=() # <-define array in required scope before calling function
+#  get_file_attributes ~/.emacs _attributes_
+#  echo "${_attributes_[@]}"
+#  exists regular symlink read notzerosize write egid modified euid _attributes_filetype
+#  echo "$(elvar "_attributes_[-1]")" # -1 is always the last element of an array
+#  Lisp/Scheme program, ASCII text
+#-
+{
+    local _params="${@}"
+    func-init
+
+    (( $# < 2 )) && {
+        _rtn=1 E="too few arguments"
+        error-f
+    }
+
+    (( $# > 3 )) && {
+        _rtn=1 E="too many arguments"
+        error-f
+    }
+
+    [[ "${1}" =~ -c|--canonicalize ]] && {
+        local _file_=$(readlink -m ${2})
+        shift
+    } || {
+        local _file_="${1}"
+    }
+    shift
+    local _arrayname_=${1}
+    local _noaccess=
+
+    # can we read it?
+    [[ ! "$(stat -t "${_file_}" 2>&1)" =~ ^.*:\ (.*)$ ]] || {
+        # stat threw an error
+        _noaccess="${BASH_REMATCH[1]}"
+    }
+
+    [[ "${_noaccess}" ]] && {
+
+        # stat says the file's not accessible for a reason we'll set
+        # into the last var-element.
+        array_append ${_arrayname_} < <(echo "noaccess")
+        eval "${_arrayname_}_error='${_noaccess}'"
+        # Here we add a pointer to the failed result of stat as a
+        # varname to the last element of the array.
+        array_append ${_arrayname_} < <(echo "${_arrayname_}_error")
+
+    } || {
+
+        # stat exits cleanly, so we have permission to read it...
+        # Here we check the file against all built in filetypes. On
+        # matches, the match-name is added to the array whose name
+        # was passed in as parameter $2.
+
+        # True if file exists.
+        [[ -a ${_file_} || -e ${_file_} ]] && array_append ${_arrayname_} < <(echo "exists")
+
+        # True if file exists and is a block special file.
+        [[ -b ${_file_} ]] && array_append ${_arrayname_} < <(echo "blockdev")
+
+        # True if file exists and is a character special file.
+        [[ -c ${_file_} ]] && array_append ${_arrayname_} < <(echo "chardev")
+
+        # True if file exists and is a directory.
+        [[ -d ${_file_} ]] && array_append ${_arrayname_} < <(echo "directory")
+
+        # True if file exists and is a regular file.
+        [[ -f ${_file_} ]] && array_append ${_arrayname_} < <(echo "regular")
+
+        # True if file exists and is set-group-id.
+        [[ -g ${_file_} ]] && array_append ${_arrayname_} < <(echo "setgid")
+
+        # True if file exists and is a symbolic link.
+        [[ -h ${_file_} || -L ${_file_} ]] && array_append ${_arrayname_} < <(echo "symlink")
+
+        # True if file exists and its ``sticky'' bit is set.
+        [[ -k ${_file_} ]] && array_append ${_arrayname_} < <(echo "sticky")
+
+        # True if file exists and is a named pipe (FIFO).
+        [[ -p ${_file_} ]] && array_append ${_arrayname_} < <(echo "pipe")
+
+        # True if file exists and is readable.
+        [[ -r ${_file_} ]] && array_append ${_arrayname_} < <(echo "read")
+
+        # True if file exists and has a size greater than zero.
+        [[ -s ${_file_} ]] && array_append ${_arrayname_} < <(echo "notzerosize")
+
+        # True if file descriptor fd is open and refers to a terminal.
+        [[ -t ${_file_} ]] && array_append ${_arrayname_} < <(echo "openterminalfd")
+
+        # True if file exists and its set-user-id bit is set.
+        [[ -u ${_file_} ]] && array_append ${_arrayname_} < <(echo "setuid")
+
+        # True if file exists and is writable.
+        [[ -w ${_file_} ]] && array_append ${_arrayname_} < <(echo "write")
+
+        # True if file exists and is executable.
+        [[ -x ${_file_} ]] && array_append ${_arrayname_} < <(echo "execute")
+
+        # True if file exists and is owned by the effective group id.
+        [[ -G ${_file_} ]] && array_append ${_arrayname_} < <(echo "egid")
+
+        # True if file exists and has been modified since it was last read.
+        [[ -N ${_file_} ]] && array_append ${_arrayname_} < <(echo "modified")
+
+        # True if file exists and is owned by the effective user id.
+        [[ -O ${_file_} ]] && array_append ${_arrayname_} < <(echo "euid")
+
+        # True if file exists and is a socket.
+        [[ -S ${_file_} ]] && array_append ${_arrayname_} < <(echo "socket")
+
+        # Here we determine what type of contents the file has, and
+        # store that in a var derived from the array name passed in.
+        # The var is then elvar'd in the caller to extract the data.
+        # If the varname is defined in the caller, it will be local
+        # to the caller, otherwise it will be global in scope.
+        eval "${_arrayname_}_filetype="\'$(file -b -n -L -p -r -e cdf -e elf  ${_file_})\'""
+
+        # Here we add a pointer to the result of file as a varname to the
+        # last element of the array.
+        array_append ${_arrayname_} < <(echo "${_arrayname_}_filetype")
+    }
+
+    # reset pipeline status
+    :
+
+    # for testing
+    #log_fd 2 "${_arrayname_}:  $(evar "${_arrayname_}[@]:0:(($(evar "#${_arrayname_}"[@]) -1))")"
+    #log_fd 2 "${_arrayname_}:  $(evar "${_arrayname_}[@]")"
+    #log_fd 2 "filetype or error: $(elvar "${_arrayname_}[-1]")"
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function get_lock()
+# Description:
+#  Creates a lock atomically (actually uses a directory). Will block for
+#  a maximum of specified or ${LOCK_WAIT} seconds if var is set, or
+#  FOREVER* if unset, if lock cannot be obtained.
+# API:
+#  $1   - full path to lock dirname
+#  [$2] - Optional timeout. Falls back to ${LOCK_WAIT} if set, or
+#  *defaults to 32768 secs.
+# Outputs:
+#  atomic lock name, or nothing on error.
+#  creates the empty directory as a lock in the filesystem.
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _lock=${1:?$(echo "lock name missing")}
+    local -i _wait=${2:-${LOCK_WAIT:-32768}}
+    local -i _count
+    until mkdir ${_lock} 2>/dev/null || (( _count++ == _wait )); do
+        sleep 1
+    done
+    (( _count >= _wait )) && { _rtn=1 E="${FUNCNAME}: acquiring lock '${1}' timed out"; error-f; }
+    echo ${_lock}
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function del_lock()
+# Description: removes a lock
+# API:
+#  $1 - full path to lock dirname
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _lock=${1}
+    rm -rf ${_lock} 2>/dev/null
+    _rtn=${?}
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function gen_tempfile()
+# Description: generate a unique temp filename
+# API:
+#  $1 - optional directory
+# Ouputs:
+#  full path to unique filename
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _f=
+    _f=${1:-${TMP:-/tmp}}/$(gen_uuid) || { _rtn=1 E="${FUNCNAME}: gen_uuid failed"; error-f; }
+    mkdir -p ${_f%/*} || { _rtn=1 E="${FUNCNAME}: mkdir"; error-f; }
+    touch ${_f}       || { _rtn=1 E="${FUNCNAME}: touch failed"; error-f; }
+    echo "${_f}"
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function gen_iid()
+# Description:
+#  creates a unique 8-character hex string for use in identifying
+#  parallel process instances in the logs
+# API:
+#  n/a
+# Outputs:
+#  8-char hex string
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _uuid=
+    _uuid=$(gen_uuid) || { _rtn=1 E="${FUNCNAME}: gen_uuid failed"; error-f; }
+    echo ${_uuid:0:8}
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function gen_jiffies()
+# Description: generates a subsecond timestamp
+# Depends:
+# API:
+#  n/a
+# Inputs: none
+# Outputs: subsecond timestamp
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    date +%s.%N
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function gen_uuid()
+# Description: generate an rfc4122 v4 uuid
+# Depends: external program 'uuidgen'
+# API:
+#  n/a
+# Outputs:
+#  RFC 4122v4 UUID
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    local _params="${@}"
+    func-init
+
+    [[ $(which uuidgen) ]] && {
+        uuidgen
+     } || {
+        log_fd 2 "Error: uuidgen missing. please install"
+        echo "${RANDOM}${RANDOM}${RANDOM}-not-a-uuid-please-install-uuidgen-${RANDOM}"
+    }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function array_init()
+# Description:
+#  initializes an new array by populating 'size of array' number of
+#  elements to 'element string'. newline delimited.
+# API:
+#  $1 - size of array
+#  $2 - element string, defaults to ${EMPTY_ARG} if set, otherwise NONE.
+# Example:
+#  my_array=( $(array_init 3 "elem") )
+#  echo " my array contains: ${my_array[*]}"
+#  my array contains: elem elem elem
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local -i _sz_=${1}
+    local -i e=
+    for (( e = 0; e < ${_sz_}; e++ )); do
+        echo ${2:-${EMPTY_ARG:-NONE}}
+    done
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function array_mask()
+# Description:
+#  create an array mask of a given array.  An array mask is related to
+#  another array in that it's elements are either a 1 or a 0 depending
+#  upon whether it's parent array has that element defined or it's set
+#  to a global empty argument.  Mask is 1 when the element is set, and
+#  0 when the element matches the empty argument string, e.g.
+#  in an unchanged state from that created by array_init()
+# API:
+#  $1 - parent array to mask, passed in as name
+#  $2 - global empty element value, defaults to ${EMPTY_ARG} if set, otherwise NONE.
+# Example:
+#  echo "${my_array[@]}"
+#    elem elem foo
+#  my_array_mask=( $(array_mask my_array "elem") )
+#  echo "${my_array_mask[@]}"
+#    0 0 1
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _parent_=${1:?$(echo "bad args. ${FUNCNAME} <parent_array_name> [ampty-arg]")}
+    local _empty_=${2:-${EMPTY_ARG:-NONE}}
+    local _parent=( $(evar ${_parent_}[@]) )
+    local -i e=
+    for (( e = 0; e < ${#_parent[@]}; e++ )); do
+        [[ "${_parent[e]}" == "${_empty_}" ]]; echo $?
+    done
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function array_append()
+# Description:
+#  Append new data to an existing (or new) array using stdin
+# API:
+#  $1 - array to append to or create, passed in as name
+# Outputs:
+#  either updates an existing array, or creates one if not set
+# Returns:
+#  0 on success
+#  1 on failure
+# Example:
+#  aa=( a b c d e f g )
+#  array_append aa < <(for x in h i j k l; do echo $x; done;)
+#  echo "${aa[@]}"
+#  a b c d e f g h i j k l
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _arrayname_=${1}
+    readarray -t -O $(evar \#${_arrayname_}[@]) ${_arrayname_} < <(get_stdin)
+    _rtn=$(get_status)
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function array_prepend()
+# Description:
+#  Prepend new data to an existing (or new) array using stdin
+# API:
+#  $1 - array to prepend to or create, passed in as name
+# Outputs:
+#  either updates an existing array, or creates one if not set
+# Returns:
+#  0 on success
+#  1 on failure
+# Example:
+#  aa=( a b c d e f g )
+#  array_prepend aa < <(for x in h i j k l; do echo $x; done;)
+#  echo "${aa[@]}"
+#  h i j k l a b c d e f g
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _arrayname_=${1}
+    readarray ${_arrayname_} < <(get_stdin; evar "${_arrayname_}[@]")
+    _rtn=$(get_status)
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function array_append_elements()
+# Description: append every element in an array with supplied string
+# Depends: n/a
+# API:
+#  $1   - name of array to modify
+# "$2+" - string to append to each element
+# Outputs: modifies existing array
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#   before: myarray=( a b c d )
+#   array_append_elements myarray "X"
+#   after: myarray=( aX bX cX dX )
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _arrayname_=${1}; shift
+    local _append_="${*}"
+    eval "${_arrayname_}=( $(evar "${_arrayname_}[@]/%/${_append_}") )"
+    _rtn=$(get_status)
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function array_prepend_elements()
+# Description: prepend every element in an array with supplied string
+# Depends: n/a
+# API:
+#  $1   - name of array to modify
+# "$2+" - string to prepend to each element
+# Outputs: modifies existing array
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#   before: myarray=( a b c d )
+#   array_prepend_elements myarray "X"
+#   after: myarray=( Xa Xb Xc Xd )
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _arrayname_=${1}; shift
+    local _prepend_="${*}"
+    eval "${_arrayname_}=( $(evar "${_arrayname_}[@]/#/${_prepend_}") )"
+    _rtn=$(get_status)
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function array_sort_elements()
+# Description: recreate the array sorted
+# Depends: n/a
+# API:
+#  $1  - name of array to modify
+#  $2+ - options to sort command
+# Outputs: modifies existing array
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#   before: myarray=( a b c d )
+#   array_sort_elements myarray -r
+#   after: myarray=( d c b a )
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _arrayname_=${1}; shift
+    local _sort_opts_="${*}"
+    eval "${_arrayname_}=( "$(echo -e "$(evar "${_arrayname_}[@]/%/\\\\n")" | sort ${_sort_opts_})" )"
+    _rtn=$(get_status)
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function array_replace_in_elements()
+# Description: recreate the array with string replacements
+# Depends: n/a
+# API:
+#  $1 - name of array to modify
+#  $2 - string to replace
+#  $3 - replacement string
+#  [$4] - global flag (rather than default of only first instance per element)
+# Outputs: modifies existing array
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  replace first instance
+#   before: myarray=( a21 b21 c22 d21 )
+#   array_replace_in_elements myarray 2 3
+#   after: myarray=( a31 b31 c32 d31 )
+#  replace all instances
+#   array_replace_in_elements myarray 2 3 g <-'g' can be anything really
+#   after: myarray=( a31 b31 c33 d31 )
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _arrayname_=${1}
+    local _str_="${2}"
+    local _rep_="${3}"
+    local _gbl_=${4}
+    [[ ${_gbl_} ]] && {
+        eval "${_arrayname_}=( $(evar "${_arrayname_}[@]//${_str_}/${_rep_}") )"
+        _rtn=$(get_status)
+    } || {
+        eval "${_arrayname_}=( $(evar "${_arrayname_}[@]/${_str_}/${_rep_}") )"
+        _rtn=$(get_status)
+    }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function array_delete_from_elements()
+# Description: recreate the array with string deletions
+# Depends: n/a
+# API:
+#  $1 - name of array to modify
+#  $2 - string to delete
+#  [$3] - global flag (rather than default of only first instance per element)
+# Outputs: modifies existing array
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  delete first instance
+#   before: myarray=( a21 b21 c22 d21 )
+#   array_delete_from_elements myarray 2
+#   after: myarray=( a1 b1 c2 d1 )
+#  delete all instances
+#   array_delete_from_elements myarray 2 g <-'g' can be anything really
+#   after: myarray=( a1 b1 c d1 )
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _arrayname_=${1}
+    local _str_="${2}"
+    local _gbl_=${3}
+    [[ ${_gbl_} ]] && {
+        eval "${_arrayname_}=( $(evar "${_arrayname_}[@]//${_str_}/") )"
+        _rtn=$(get_status)
+    } || {
+        eval "${_arrayname_}=( $(evar "${_arrayname_}[@]/${_str_}/") )"
+        _rtn=$(get_status)
+    }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function find_array_element()
+# Description: tests for array, then searches for existence of an element value
+# Depends: bashlib
+# API:
+#  $1 - arrayname
+#  $2 - string to search for
+# Inputs:
+# Outputs: element index if found
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    minimal-func-init
+
+    verify_argc $# 2 || return 1
+    is_array ${1} || return 1
+
+    local -a _ta=( $(evar "${1}[@]") )
+    echo -e "${_ta[@]/%/\n}" | grep -w "${2}" &>/dev/null && {
+
+        local -i i
+        for (( i=0; i<${#_ta[@]}; i++ )); do
+            # output the index for the value
+            [[ "${_ta[i]}" == "${2}" ]] && { echo ${i}; break; }
+        done
+        :
+
+    } || return 1
+
+    minimal-func-return;:
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function array_tac()
+# Description: echoes array contents in reverse order
+# Depends: bashlib
+# API:
+#  $1 - arrayname
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  $ echo "${myarr[@]}"
+#  $ one two three four
+#  $ array_tac myarr
+#  $ four three two one
+#  array
+#-
+{
+    local _params="${@}"
+    minimal-func-init
+
+    local _arr="${1}"
+    printf '%s\n' $(evar "${_arr}[@]") | tac
+
+    minimal-func-return;:
+}
+##------------------------------------------------------------------------------
+
+
+#-------------------------------------------------------------------------------
+# ideas for more array manipulators:
+# array_head/tail arrayname num
+#  returns a list of num elements from head or tail of array
+# array_search arrayname "regex"
+#  returns list of indices where "regex" is present
+# array_subelement_* ...
+#  be able to store, retrieve and manipulate multiple subelements per
+#  element, delimited by a specific character. interface and
+#  implementation needs more thought. a matrix kind of data structure.
+##------------------------------------------------------------------------------
+
+
+################################################################################
+#        V  E  R  I  F  I  C  A  T  I  O  N     R  O  U  T  I  N  E  S         #
+################################################################################
+
+#-------------------------------------------------------------------------------
+function in_recursion()
+# Description: test if we spawned ourselves
+# Depends: bashlib,
+# API:
+#  n/a
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  in_recursion || { echo "we're not in recursion"; }
+#-
+{
+    (( ${#FUNCNAME[@]} > 1 )) || return 1
+    [[ "${FUNCNAME[2]}" == "${FUNCNAME[1]}" ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_executable()
+# Description: test if parameter is a valid and reachable executable
+# Depends: bashlib,
+# API:
+#  $1 - executable name
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  is_exec cp && { cp this there/; }
+#-
+{
+    [[ $(which ${1} &>/dev/null) ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_sourceable()
+# Description: test if parameter is a valid bash script file
+# Depends: bashlib,
+# API:
+#  $1 - full path to script name
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  is_sourceable ~/.bashrc && { source ~/.bashrc; }
+#-
+{
+    # skip all files with .txt extension
+    [[ "${1##*.}" == "txt" ]] && return 1
+    # only bourne/posix executables and ASCII text files allowed
+    [[ "$(file -b "${1}")" =~ ((^(Bourne-Again|POSIX) shell\ script.*$)|(^ASCII\ text$)) ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_exist_file()
+# Description: checks if parameter is an existing file
+# API:
+#  $1 - a full file path
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ -e ${1} ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_readable_file()
+# Description: checks if parameter is a file and is readable
+# API:
+#  $1 - a full file path
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ -r ${1} ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_writable_file()
+# Description: checks if parameter is a file and is writable
+# API:
+#  $1 - a full file path
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ -w ${1} ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_devnode()
+# Description:
+#  checks if parameter is a block or character special device node
+# API:
+#  $1 - full or relative device node path
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    is_blk_devnode ${1} || is_char_devnode ${1}
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_blk_devnode()
+# Description:
+#  checks if parameter is a block special device node, canonicalizing links.
+# API:
+#  $1 - full or relative device node path
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ -b $(readlink -e ${1}) ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_char_devnode()
+# Description:
+#  checks if parameter is a character special device node, canonicalizing links.
+# API:
+#  $1 - full or relative device node path
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ -c $(readlink -e ${1}) ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_fifo()
+# Description:
+#  checks if parameter is a fifo (named pipe).
+# API:
+#  $1 - full path to fifo
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ -p ${1} ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_named_pipe()
+# Description:
+#  checks if parameter is a named pipe (fifo).
+# API:
+#  $1 - full path to fifo
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    is_fifo ${1}
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_exist_dir()
+# Description: checks if parameter is an existing dir
+# API:
+#  $1 - a full dir path
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ -d ${1} ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_readable_dir()
+# Description: checks if parameter is a directory and is readable
+# API:
+#  $1 - a full dir path
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ -r ${1} && -d ${1} ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_writable_dir()
+# Description: checks if parameter is a directory and is writable
+# API:
+#  $1 - a full dir path
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ -w ${1} && -d ${1} ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_function()
+# Description: test if parameter is a defined function name
+# Depends: bashlib,
+# API:
+#  $1 - function name
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  is_function my_func && { my_func foo bar; }
+#-
+{
+    [[ "$(typeset -F ${1})" == "${1}" ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_hash()
+# Description: test if parameter is set and an associative array (hash)
+# Depends: bashlib,
+# API:
+#  $1 - hash name
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  is_hash my_hash && { foo=${my_hash[bar]}; }
+#-
+{
+    [[ "$(typeset -p ${1} 2>/dev/null)" =~ ^(declare|local)[[:blank:]]+(-A)[[:blank:]].*$ ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_array()
+# Description: test if parameter is set and an index array
+# Depends: bashlib,
+# API:
+#  $1 - array name
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    [[ "$(typeset -p ${1} 2>/dev/null)" =~ ^(declare|local)[[:blank:]]+(-a)[[:blank:]].*$ ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_alpha()
+# Description: checks if parameter is alpha
+# API:
+#  $1 - string to test
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ ${1} =~ ^[[:alpha:]]+$ ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_alphanumeric()
+# Description: checks if parameter is alphanumeric
+# API:
+#  $1 - string to test
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ ${1} =~ ^[[:alnum:]]+$ ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_numeric()
+# Description: checks if parameter is a hex or decimal number
+# API:
+#  $1 - string to test
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ ${1} =~ ^(0x)?[0-9a-fA-F]+$ ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_decimal()
+# Description: checks if parameter is a decimal number
+# API:
+#  $1 - string to test
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ ${1} =~ ^[0-9]+$ ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_bool()
+# Description: checks if parameter is a boolean value
+# API:
+#  $1 - string to test
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ ${1} =~ ^0$|^1$|^[Yy][Ee][Ss]$|^[Nn][Oo]$|^[Oo][Nn]$|^[Oo][Ff][Ff]$|^[Tt][Rr][Uu][Ee]$|^[Ff][Aa][Ll][Ss][Ee]$ ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_true()
+# Description: checks if parameter represents true
+# API:
+#  $1 - string to test
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ ${1} =~ ^1$|^[Tt][Rr][Uu][Ee]$|^[Yy][Ee][Ss]$|^[Oo][Nn]$ ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_false()
+# Description: checks if parameter represents false
+# API:
+#  $1 - string to test
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ ${1} =~ ^0$|^[Ff][Aa][Ll][Ss][Ee]$|^[Nn][Oo]$|^[Oo][Ff][Ff]$ ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_locked()
+# Description: checks if parameter is an existing lock
+# API:
+#  $1 - lock name to test
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ -d ${1} ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_iid()
+# Description: checks if parameter is an iid (8-char numeric)
+# API:
+#  $1 - string to test
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    (( ${#1} == 8 )) && [[ ${1} =~ ^[a-f0-9]{8}$ ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_uuid()
+# Description: checks if parameter is an rfc 4122 version 4 UUID
+# API:
+#  $1 - string to test
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    (( ${#1} == 34 )) && {
+        [[ ${1} =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[4][a-f0-9]{3}-[ab89][a-f0-9]{3}-[a-f0-9]{12}$ ]]
+    }
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_lvmid()
+# Description: checks if parameter is in LVM UUID=* format
+# API:
+#  $1 - string to test
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    (( ${#1} == 41 )) && {
+        [[ ${1} =~ ^UUID=[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ ]]
+    }
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_vfatid()
+# Description: checks if parameter is in vfat UUID=* format
+# API:
+#  $1 - string to test
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    (( ${#1} == 14 )) && [[ ${1} =~ ^UUID=[A-F0-9]{4}-[A-F0-9]{4}$ ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_disk_label()
+# Description: checks if parameter is in disk LABEL=* format
+# API:
+#  $1 - string to test
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ "${1}" =~ ^LABEL=[^[:blank:]]+$ ]]
+}
+##------------------------------------------------------------------------------

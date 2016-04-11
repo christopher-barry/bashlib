@@ -1,0 +1,31 @@
+# -*- mode: sh; -*-
+#-------------------------------------------------------------------------------
+function template_minimal_func()
+# Description: used for simple functions that do not require a return trap
+# Depends: bashlib,
+# API:
+#  $1 -
+#  $2 -
+#  $3 -
+#  $4 -
+#  $5 -
+#  $@ -
+#  $* -
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    minimal-func-init
+
+    # minimal function
+
+    minimal-func-return;:
+}
+##------------------------------------------------------------------------------

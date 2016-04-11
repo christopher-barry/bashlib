@@ -1,0 +1,30 @@
+# -*- mode: sh; -*-
+#-------------------------------------------------------------------------------
+function test_get_file_attributes()
+# Description: test wrapper for get_file_attributes
+# Depends: bashlib
+# API:
+# [$1] -c|--canonicalize
+#  $1 - file/dir to test
+# Outputs: array of file attributes
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  functest -vv -i get_file_attibutes.test test_get_file_attibutes --canonicalize /etc/fstab
+#-
+{
+    local _params="${@}"
+    func-init
+
+    declare -a mytestarray=()
+    get_file_attributes ${*} mytestarray && {
+        log_fd 2 "data:  ${mytestarray[@]}"
+        log_fd 2 "varel: $(elvar "mytestarray[-1]")"
+    } || {
+        _rtn=$(get_status)
+    }
+
+    func-return
+}
+##------------------------------------------------------------------------------

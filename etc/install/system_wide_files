@@ -1,0 +1,12 @@
+# system_wide_files:
+#   list of files in source:target format that install uses when
+#   installing bashlib in system wide.
+#   * source is relative to the bashlib dir
+#   * target is relative to the bashlib dir or fullpath
+# Dependencies: bashlib
+# Authors: Christopher Barry
+# License: GPLv2 or later
+# See Also: single_user_{links,files} system_wide_links
+
+# source filename:target filename
+bashlibrc:/etc/profile.d/bashlib.sh

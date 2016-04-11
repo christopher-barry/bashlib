@@ -1,0 +1,32 @@
+# -*- mode: sh; -*-
+#-------------------------------------------------------------------------------
+function test_array_tac()
+# Description: test wrapper for array_tac
+# Depends: bashlib
+# API:
+#  $@ - array elements
+# Outputs: builtin and reverse of builtin arrays
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  functest -D -i array_tac.test test_array_tac
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local -a mytestarray=( "${@}" )
+    (( $# > 0 )) || { _rtn=1 E="${FUNCNAME}: bad args"; error-f; }
+    local -a newarray=()
+    newarray=( $(array_tac mytestarray) ) && {
+        _rtn=$(get_status)
+        log_fd 2 "original: ${mytestarray[@]}"
+        log_fd 2 "reversed: ${newarray[@]}"
+    } || {
+        _rtn=$(get_status)
+    }
+
+    func-return
+}
+##------------------------------------------------------------------------------

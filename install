@@ -1,0 +1,926 @@
+#!/bin/bash
+# -*- mode: sh; -*-
+# install: install bashlib
+# Dependencies: bashlib, readlink, GNU coreutils:install,
+# Authors: Christopher Barry
+# License: GPLv2 or later
+#
+################################################################################
+#          B  A  S  H  L  I  B     I  N  S  T  A  L  L  A  T  I  O  N          #
+################################################################################
+
+#=================================BEGIN_USAGE===================================
+# NAME
+#   install - installs bashlib
+#
+# SYNOPSIS
+#   install [[-v|--verbose]|[-D|--debug]] [--prefix=/base/install/path|{~/bin}]
+#   install [-h|--help]
+#
+# DESCRIPTION
+#   Copies bashlib file hierarchy into the location specified by
+#   --prefix, or as set in the environment variable $PREFIX, or by
+#   default, into ~/bin. Also sets correct permissions and modes on
+#   all files, and creates various symlinks as required, including a
+#   special uninstall link.
+#
+#   This script, as well as other examples found in ./doc/examples/*
+#   also serve to highlight bashlib capabilities and features, and
+#   instruct in the use of the bashlib.
+#
+# FEATURES
+#   Allows for user-only or system-wide installation. If run via the
+#   symlink named 'uninstall' found in the bashlib directory of the
+#   previously installed directory hierarchy, will purge all installed
+#   files, but leaves any customized or user created files intact.
+#
+#   Configures the system and prepares it for scripts based on the
+#   templates in <base_dir>/bashlib/lib/templates directory to
+#   leverage all of the functions, error handling, and debugging
+#   capabilities of the bashlib.
+#
+#   See INSTALL for more information plus any manual post-installation
+#   steps that might be required depending upon your setup.
+#
+# OPTIONS
+#   BUILTINS
+#     [[-v|--verbose]|[-D|--debug]]
+#       Controls extended output verbosity level.
+#       MUST be the FIRST parameter to have any effect.
+#         -v|--verbose
+#           writes logs to screen and ~/log/install.log
+#         -D|--debug
+#           outputs xtrace data to ~/log/install.debug
+#           and enables --verbose output as well.
+#
+#     [-h | --help]
+#       Display basic and full usage information respectively and exit.
+#
+#   PROGRAM SPECIFIC
+#   [--prefix=/install/prefix]
+#     For user-only installs, this defaults to ~/bin if not
+#     set. System-wide installs require appropriate priveliges,
+#     typically root. Overrides $PREFIX if set.
+#
+#     If installed as root, when specifying --prefix to, or if $PREFIX
+#     is set to, any of /usr/local, /usr, or /opt, the prefix will be
+#     expanded to be $PREFIX/lib. If not specified, defaults to ~/bin
+#     as with user-only installs.
+#
+# EXAMPLES
+#   install --verbose
+#     Verbosely installs the bashlib directory hierarchy into ~/bin,
+#     creating the ~/bin directory if it does not exist, setting
+#     permissions and modes of all files and directories as required.
+#
+#     Creates symlinks in ~/bin to helper and example scripts found in
+#     various directories in ~/bin/bashlib/.
+#
+#     Copies ~/bin/bashlib/bashlibrc to ~/.bashlibrc
+#
+#     Creates a symlink in ~/.config/bashlib/ pointing to
+#     ~/bin/bashlib/etc/base.cfg. The '~/.config/bashlib' directory is
+#     created if it does not exist.
+#
+#     Creates a special symlink in ~/bin/bashlib/uninstall which
+#     runs this install script in uninstall mode.  uninstall must be
+#     run from within the installed bashlib directory.
+#
+#     Creates ~/bin/bashlib/MANIFEST which contains a list of all
+#     installed file and link names.
+#
+#     Creates ~/bin/bashlib/checksums with SHA256 sums for all
+#     installed files, and is used during uninstallation to prevent
+#     removing any modified or user provided files or directories.
+#
+#     Logs every step of the installation to ~/log/install.log,
+#     creating the ~/log directory if it does not exist.
+#
+#   install --prefix=/usr/local
+#     Performs a privileged system-wide install of the bashlib
+#     directory hierarchy into /usr/local/lib, creating the directory
+#     if it does not exist, setting permissions and modes of all files
+#     and directories as required.
+#
+#     Creates symlinks in /usr/local/bin to helper scripts found in
+#     /usr/local/lib/bashlib/bin.
+#
+#     Copies /usr/local/lib/bashlib/bashlibrc to
+#     /etc/profile.d/bashlib.sh
+#
+#     Creates a symlink in /etc/bashlib/ pointing to
+#     /usr/local/lib/bashlib/etc/base.cfg. The '/etc/bashlib'
+#     directory is created if it does not exist.
+#
+#     Creates the special symlink /usr/local/lib/bashlib/uninstall
+#     which runs this install script in uninstall mode. uninstall must
+#     be run from within the installed bashlib directory.
+#
+#     Creates /usr/local/lib/bashlib/MANIFEST which contains a list of
+#     all installed file and link names.
+#
+#     Creates /usr/local/lib/bashlib/checksums with SHA256 sums for
+#     all installed files, and is used during uninstallation to
+#     prevent removing any modified or user provided files or
+#     directories.
+#
+#     Logs every step of the installation to ~/log/install.log,
+#     creating the ~/log directory if it does not exist.
+#
+# FILES
+#   ./* - all files in the bashlib package
+#
+# ENVIRONMENT
+#   PREFIX=/base/install/directory
+#     if set denotes the base installation directory prefix. See
+#     options above.
+#
+#   base.cfg contains basic configuration environmental variables, and
+#   instantiates values for all library functions.
+#
+# EXIT STATUS
+#
+# AUTHORS
+#   christopher barry <christopher.r.barry(at)gmail.com>
+#
+# SEE ALSO
+#   ./INSTALL
+#
+#==================================END_USAGE====================================
+
+################################################################################
+#     C  O  N  F  I  G  U  R  A  T  I  O  N     A  N  D     S  E  T  U  P      #
+################################################################################
+
+# special case for install: we must bootstrap bashlibrc directly from
+# the install source package, and before we know this version of bash.
+unset IPATH
+IPATH="${0%/*}/lib"
+method=`basename "$0"`
+if [ X"$method" == X"install" ]; then
+    mydir=`dirname "$0"`
+    . "$mydir"/bashlibrc
+    if (( $? > 0 )); then
+        echo >&2 "error loading $mydir/bashlibrc. aborting installation."
+        exit 1
+    fi
+fi
+
+# bash 4.2+ or bail
+check_bash_version || exit 1
+
+# special case for [un]install: bootstrap relative config
+config "${0%/*}"/etc/base.cfg
+
+# standard bashlib includes
+import macros
+import logging
+import utilities
+
+# builtin verbosity levels
+case "${1}" in
+    -v|--verbose) _VERBOSE_=true; shift ;;
+    -D|--debug)   _DEBUG_=true;   shift ;;
+esac
+
+# initialize logging, debug, and program subsystems
+log_init; log_debug_init; _params="${@}"; prog-init
+
+# builtin help functionality
+show_help "${@}"
+
+################################################################################
+#                 P  R  O  G  R  A  M     B  E  G  I  N  S                     #
+################################################################################
+
+#-------------------------------------------------------------------------------
+function install_verify_prefix()
+# Description:
+#  check to make sure we can install bashlib into the desired
+#  location, creating any directories in the path as required.
+# Depends: bashlib, readlink
+# API:
+#  [$1] [--prefix=/some/dir]
+# Inputs:
+#  --prefix=/blah, pre-set ${PREFIX} env var, or none for default
+#  install prefix of ~/bin
+# Outputs: verified ${PREFIX} path
+# Environment: [$PREFIX]
+# Returns:
+#  0 on success
+#  exits on failure
+# Examples:
+#  PREFIX="$(install_verify_prefix)" || { _rtn=1; error-f; }
+#-
+{
+    local _params="${@}"
+    func-init
+
+    # was anything passed in?
+    (( $# > 0 )) && {
+        [[ "${1}" =~ --prefix=(.*) ]] && {
+            declare -g PREFIX="$(readlink -m ${BASH_REMATCH[1]})"
+        }
+    }
+
+    # determine base directory
+    [[ "${PREFIX}" ]] && {
+        case "${PREFIX}" in
+            "/usr/local"|"/usr"|"/opt")
+                PREFIX="${PREFIX}/lib"
+                ;;
+            "*" )
+                PREFIX="$(readlink -m ${PREFIX})"
+                ;;
+        esac
+    } || {
+        PREFIX="$(readlink -m ~/bin)"
+    }
+
+    # can we install into PREFIX?
+    # verify by non-destructively recreating the dir structure
+    mkdir -p "${PREFIX}" &>/dev/null || {
+        log "${_err} ${FUNCNAME}: you do not have permission to install into ${PREFIX}"
+        _rtn=1 E="${_err} ${FUNCNAME}: You must be root."
+        error-f
+    }
+
+    _rtn=$(get_status)
+    log "Installing bashlib into ${PREFIX}..."
+
+    # output verified PREFIX path
+    log_fd 1 "${PREFIX}"
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function install_is_system_wide()
+# Description: determine if a personal or system-wide install
+# Depends: bashlib
+# API:
+#  n/a
+# Inputs: euid of user, ${PREFIX}
+# Outputs: n\a
+# Environment: $(id -un), ${PREFIX}
+# Returns:
+#  0 is a system install
+#  1 is a personal install
+# Examples:
+#  if install_is_system_wide; then ... else; ... fi
+#-
+{
+    # look for username in install path
+    [[ "$(echo "${PREFIX//\/ }" | grep -w $(id -un))" ]]
+
+    return $(($?^1))
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function install_files()
+# Description:
+#  install files from deployed source tree into the filesystem as required
+# Depends: bashlib
+# API:
+#  $1 - prefix
+#  $2 - install target
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _prefix="$(readlink -e "${1}")"
+    local _install_target=${2}
+    local -a _source_files=() _target_files=()
+
+    array_append _source_files < <(clean_cat ${_prefix}/bashlib/etc/install/${_install_target}_files | awk -F: '{ print $1 }')
+    array_append _target_files < <(clean_cat ${_prefix}/bashlib/etc/install/${_install_target}_files | awk -F: '{ print $2 }')
+
+    # perms and prefixes...
+    case "${_install_target}" in
+        "single_user")
+            local _dirmode=750
+            local _install_target_prefix=~/
+            ;;
+        "system_wide")
+            local _dirmode=755
+            case "${_prefix}" in
+                "/usr/local/lib"|"/usr/lib"|"/opt/lib")
+                    local _install_target_prefix=../../
+                    ;;
+                "*")
+                    # default to here if nothing matches
+                    local _install_target_prefix=/usr/local/
+                    ;;
+            esac
+            ;;
+    esac
+
+    # copy files out of the tree to other locations as specified in
+    # the configuration files in bashlib/etc/*_files
+    local -i f=
+    for (( f=0; f<${#_source_files[@]}; f++ )); do
+
+        [[ "${_target_files[f]:0:1}" == "/" ]] && {
+            # full path spec
+            # don't create a dir from a filename!
+            [[ "${_target_files[f]%/*}" != "${_target_files[f]}" ]] && {
+                try mkdir -m ${_dirmode} -p "${_target_files[f]%/*}" || { _rtn=1; error-f; }
+            }
+            try cp "${_prefix}/bashlib/${_source_files[f]}" "${_target_files[f]}" || { _rtn=1; error-f; }
+
+        } || {
+            # relative path spec
+            # don't create a dir from a filename!
+            [[ "${_target_files[f]%/*}" != "${_target_files[f]}" ]] && {
+                try mkdir -m ${_dirmode} -p "${_install_target_prefix}${_target_files[f]%/*}" || { _rtn=1; error-f; }
+            }
+            try cp "${_prefix}/bashlib/${_source_files[f]}" "${_install_target_prefix}${_target_files[f]}" || { _rtn=1; error-f; }
+        }
+    done
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function install_links()
+# Description: install symlinks from install tree to correct locations
+# Depends: bashlib
+# API:
+#  $1 - prefix
+#  $2 - install target
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _prefix="$(readlink -e "${1}")"
+    local _install_target=${2}
+    local -a  _link_names=() _link_targets=()
+
+    array_append _link_names   < <(clean_cat ${_prefix}/bashlib/etc/install/${_install_target}_links | awk -F: '{ print $1 }')
+    array_append _link_targets < <(clean_cat ${_prefix}/bashlib/etc/install/${_install_target}_links | awk -F: '{ print $2 }')
+
+    # perms and prefixes...
+    case "${_install_target}" in
+        "single_user")
+            local _dirmode=750
+            local _install_target_prefix=~/
+            ;;
+        "system_wide")
+            local _dirmode=755
+            case "${_prefix}" in
+                "/usr/local/lib"|"/usr/lib"|"/opt/lib")
+                    local _install_target_prefix=../../
+                    ;;
+                "*")
+                    # default to here if nothing matches
+                    local _install_target_prefix=/usr/local/
+                    ;;
+            esac
+            ;;
+    esac
+
+    # create links out of the tree in other locations, pointing back
+    # into the tree as specified in the configuration files in
+    # bashlib/etc/*_links
+    local -i f=
+    for (( f=0; f<${#_link_targets[@]}; f++ )); do
+
+        [[ "${_link_names[f]:0:1}" == "/" ]] && {
+            # full path spec
+            # don't create a dir from a filename!
+            [[ "${_link_names[f]%/*}" != "${_link_names[f]}" ]] && {
+                try mkdir -m ${_dirmode} -p "${_link_names[f]%/*}" || { _rtn=1; error-f; }
+            }
+            (
+                cd "${_link_names[f]%/*}" || { _rtn=1; error-f; }
+                try ln -sf "${_prefix}/bashlib/${_link_targets[f]}" "${_link_names[f]##*/}" || { _rtn=1; error-f; }
+
+            ) || { _rtn=$(get_status); error-f; }
+
+        } || {
+            # relative path spec
+            # don't create a dir from a filename!
+            [[ "${_link_names[f]%/*}" != "${_link_names[f]}" ]] && {
+                try mkdir -m ${_dirmode} -p "${_install_target_prefix}${_link_names[f]%/*}" || { _rtn=1; error-f; }
+            }
+            (
+                cd "${_install_target_prefix}${_link_names[f]%/*}" || { _rtn=1; error-f; }
+                try ln -sf "${_prefix}/bashlib/${_link_targets[f]}" "${_link_names[f]##*/}" || { _rtn=1; error-f; }
+
+            ) || { _rtn=$(get_status); error-f; }
+        }
+    done
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function install_generate_manifest()
+# Description:
+# Depends: bashlib
+# API:
+#  $1 - prefix
+#  $2 - install_target
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _prefix="$(readlink -e "${1}")"
+    local _install_target=${2}
+    local -a _link_names=() _target_files=() _source_files=()
+
+    array_append _link_names   < <(clean_cat ${_prefix}/bashlib/etc/install/${_install_target}_links | awk -F: '{ print $1 }')
+    array_append _target_files < <(clean_cat ${_prefix}/bashlib/etc/install/${_install_target}_files | awk -F: '{ print $2 }')
+
+    # prefixes...
+    case "${_install_target}" in
+        "single_user")
+            local _install_target_prefix=~/
+            ;;
+        "system_wide")
+            case "${_prefix}" in
+                "/usr/local/lib"|"/usr/lib"|"/opt/lib")
+                    local _install_target_prefix=../../
+                    ;;
+                "*")
+                    # default to here if nothing matches
+                    local _install_target_prefix=/usr/local/
+                    ;;
+            esac
+            ;;
+    esac
+
+    # populate the array via the process substitution
+    array_append _source_files < <(
+
+        # all in-tree files
+        find ${_prefix}/bashlib -type f || { _rtn=$(get_status); error-p; }
+
+        # all out-of-tree links
+        local -i f=
+        for (( f=0; f<${#_link_names[@]}; f++ )); do
+            [[ "${_link_names[f]:0:1}" == "/" ]] && {
+                # full path spec
+                echo "${_link_names[f]}"
+            } || {
+                # relative path spec
+                echo "${_install_target_prefix}${_link_names[f]}"
+            }
+        done
+
+        # all out-of-tree files
+        local -i f=
+        for (( f=0; f<${#_target_names[@]}; f++ )); do
+            [[ "${_target_names[f]:0:1}" == "/" ]] && {
+                # full path spec
+                echo "${_target_names[f]}"
+            } || {
+                # relative path spec
+                echo "${_install_target_prefix}${_target_names[f]}"
+            }
+        done
+
+    ) || { _rtn=$(get_status); error-f; }
+
+    printf %s'\n' "${_source_files[@]}" >MANIFEST
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function install_create_uninstall_link()
+# Description: create a special uninstall link
+# Depends: bashlib
+# API:
+#  n/a
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    func-init
+
+    try ln -sf install uninstall || { _rtn=1; error-f; }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function install_set_permissions()
+# Description: sets correct permissions for all files and directories
+# Depends: bashlib
+# API:
+#  $1 - prefix
+#  $2 - install target
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _prefix="$(readlink -e "${1}")"
+    local _install_target=${2}
+
+    case "${_install_target}" in
+        "single_user")
+            local _dirmode=750
+            local _fmode=640
+            local _xmode=750
+            ;;
+        "system_wide")
+            local _dirmode=755
+            local _fmode=644
+            local _xmode=755
+            ;;
+    esac
+
+    (
+        cd "${_prefix}" || { _rtn=1; error-f; }
+        try find bashlib -type d -exec chmod ${_dirmode} '{}' \; || { _rtn=1; error-f; }
+        try find bashlib -type f -a -not -executable -exec chmod ${_fmode} '{}' \; || { _rtn=1; error-f; }
+        try find bashlib -type f -a -executable -exec chmod ${_xmode} '{}' \; || { _rtn=1; error-f; }
+        try chown -R $(id -un):$(id -un) bashlib || { _rtn=1; error-f; }
+
+    ) || { _rtn=1; error-f; }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function install_generate_filehashes()
+# Description:
+# Depends: bashlib
+# API:
+#  $1 - prefix
+#  $2 - install_target
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _prefix="$(readlink -e "${1}")"
+    local _install_target=${2}
+
+    local _manifest=${_prefix}/bashlib/MANIFEST
+    local _checksums=${_prefix}/bashlib/checksums
+
+    try is_readable_file ${_manifest} || { _rtn=1; error-f; }
+
+    > ${_checksums}
+
+    local _fn
+    for _fn in $(<${_prefix}/bashlib/MANIFEST); do
+        try --eval "sha256sum ${_fn} >> ${_checksums}" || { _rtn=1; error-f; }
+    done
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function install_update_bashrc()
+# Description: update .bashrc with code to load bashlib in single_user installs
+# Depends: bashlib,
+# API:
+#  $1 - prefix
+#  $2 - install_target
+#  [$3] - yY|nN do, or don't automagically update .bashrc
+#  n/a  - interactive, allowing selecting to update .bashrc or not.
+# Inputs:
+# Outputs:
+# Environment: ${UPDATE_BASHRC} := [Yy] | [Nn] | unset
+#  [Yy]   - automatically update .bashrc
+#  [Nn]   - automatically do not update .bashrc
+#  unset  - prompt for what to do (default)
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _prefix="$(readlink -e "${1}")"
+    local _install_target=${2}
+    local _update=${3}
+    [[ ${UPDATE_BASHRC} ]] && _update=${UPDATE_BASHRC}
+
+    [[ "${_install_target}" == "single_user" ]] || { _rtn=0; func-return; }
+
+    function install_update_bashrc_clear()
+    {
+        sed --in-place \
+            -e '/^.*\#\ initialize\ bashlib$/d' \
+            -e '/^.*IPATH=.*\/bashlib\/lib$/d' \
+            -e '/^.*export\ IPATH$/d' \
+            -e '/^.*source.*bashlibrc$/d' ~/.bashrc
+    }
+
+    function install_update_bashrc_write()
+    {
+        echo "# initialize bashlib"          >> ~/.bashrc
+        echo "IPATH=${_prefix}/bashlib/lib"  >> ~/.bashrc
+        echo "export IPATH"                  >> ~/.bashrc
+        echo "source ~/.bashlibrc"           >> ~/.bashrc
+
+        log_fd 2 "~/.bashrc has been updated. Open a new terminal, or run:"
+        log_fd 2 " source ~/.bashrc"
+        log_fd 2 "in an existing terminal to reload"
+    }
+
+    function install_update_bashrc_authorize()
+    {
+        [[ "$(get_user_input "[U]pdate .bashrc to enable bashlib or [S]kip update?" U u S s)" == [Uu] ]] && {
+            return 0
+        } || {
+            return 1
+        }
+    }
+
+    # automagic
+    [[ "${_update^^}" == "Y" ]] && {
+        install_update_bashrc_clear
+        install_update_bashrc_write
+        func-return
+    } || true
+
+    # prompted
+    [[ ! ${_update} ]] || [[ ! "${_update^^}" == "N" ]] && {
+
+        install_update_bashrc_authorize && {
+            install_update_bashrc_clear
+            install_update_bashrc_write
+        } || {
+            [[ "$(grep '^source.*bashlibrc$' ~/.bashrc)" ]] && {
+                log_fd 2 ".bashrc not updated"
+            } || {
+                log_fd 2 "bashlib load code not installed into .bashrc"
+            }
+        }
+        func-return
+
+    } || true
+
+    [[ "$(grep '^source.*bashlibrc$' ~/.bashrc)" ]] && {
+        log_fd 2 ".bashrc not updated"
+    } || {
+        log_fd 2 "bashlib load code not installed into .bashrc"
+        log_fd 2 "See ~/.bashlibrc for how to load it automatically."
+    }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function install_to()
+# Description: install for single user or system wide
+# Depends: bashlib
+# API:
+#  $1 - prefix
+#  $2 - install_target
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _prefix="${1}"
+    local _install_target=${2}
+
+    (
+        # copy the source tree, minus git stuff, to the destination base directory
+        local _srcdir_base=
+        _srcdir_base="$(readlink -m "${0%/*}/..")"
+
+        log "installing source tree into ${_prefix}..."
+
+        cd "${_srcdir_base}" || { _rtn=1; error-f; }
+
+        local _rsync_opts="-q"
+        is_true "${_VERBOSE_}" && _rsync_opts="-v"
+        is_true "${_DEBUG_}"   && _rsync_opts+="v"
+        try rsync ${_rsync_opts}  -a --exclude=".git/***" --exclude=".git*" "${_srcdir_base}"/bashlib "${_prefix}/" || {
+            _rtn=$(get_status)
+            E="${_err} ${FUNCNAME}: rsync failed"
+            error-f
+        }
+
+    ) || { _rtn=$(get_status); error-f; }
+
+    (
+        log "setting up additional files and links..."
+
+        cd "${_prefix}/bashlib" || { _rtn=1; error-f; }
+
+        try install_files "${_prefix}" ${_install_target} || { _rtn=1; error-f; }
+
+        try install_links "${_prefix}" ${_install_target} || { _rtn=1; error-f; }
+
+        try install_generate_manifest "${_prefix}" ${_install_target} || { _rtn=1; error-f; }
+
+        try install_create_uninstall_link "${_prefix}" ${_install_target} || { _rtn=1; error-f; }
+
+        try install_set_permissions "${_prefix}" ${_install_target}  || { _rtn=1; error-f; }
+
+        try install_generate_filehashes "${_prefix}" ${_install_target}  || { _rtn=1; error-f; }
+
+        try install_update_bashrc "${_prefix}" ${_install_target}  || { _rtn=1; error-f; }
+
+    ) || { _rtn=$(get_status); error-f; }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function install_execute()
+# Description: runs the actual installation
+# Depends: bashlib
+# API:
+#  $1 - [prefix]
+# Inputs:
+# Outputs:
+# Environment: $PREFIX
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _PREFIX="${1}"
+    log "verifying where we are installing to..."
+    PREFIX="$(install_verify_prefix "${_PREFIX}")" || { _rtn=1; error-f; }
+    log "installing to '${PREFIX}' verified"
+
+    # isolate install type
+    if install_is_system_wide; then
+        INSTALL_TARGET=system_wide
+    else
+        INSTALL_TARGET=single_user
+    fi
+
+    [[ "${INSTALL_TARGET}" == "system_wide" && ! "$(id -u)" == "0" ]] && {
+        log "Error: install type is '${INSTALL_TARGET}', and you're not root, so buh bye..."
+        _rtn=0
+        error-f
+    }
+
+    try install_to "${PREFIX}" ${INSTALL_TARGET} ||  { _rtn=1; error-f; }
+
+    log_fd 2 "installation complete."
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function uninstall_from()
+# Description: uninstall from single user or system wide
+# Depends: bashlib
+# API:
+#  $1 - prefix
+#  $2 - install target
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _prefix="$(readlink -e "${1}")"
+    local _install_target=${2}
+
+    #TODO...
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function uninstall_execute()
+# Description: runs the uninstallation functions
+# Depends: bashlib
+# API:
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    func-init
+
+    (
+        # get into the directory above the installation
+        cd "$(readlink -e "${0%/*}"/..)"
+        local PREFIX="$(readlink -e "${PWD}")"
+
+        # isolate install type
+        if install_is_system_wide; then
+            INSTALL_TARGET=system_wide
+        else
+            INSTALL_TARGET=single_user
+        fi
+
+        [[ "${INSTALL_TARGET}" == "system_wide" && ! "$(id -u)" == "0" ]] && {
+            log "Error: You must have elevated permissions to uninstall from ${PREFIX}."
+            _rtn=0
+            error-f
+        }
+
+        try uninstall_from "${PREFIX}" ${INSTALL_TARGET} || { _rtn=1; error-f; }
+
+        log_fd 2 "uninstallation complete."
+
+    ) || { _rtn=1; error-f; }
+
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+# make it so...
+log_banner centered "beginning bashlib ${0##*/}ation" | log
+${0##*/}_execute "${@}" || { _rtn=1; E="crap..."; error-p; }
+
+# exit macro
+prog-exit

@@ -1,0 +1,41 @@
+# -*- mode: sh; -*-
+#-------------------------------------------------------------------------------
+function test_array_append()
+# Description:
+# Depends: bashlib
+# API:
+#  $@ - data to append
+# Inputs: name of array to append data to via stdin
+# Outputs: original array replaced with modified version
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  functest -D -i array_append.test test_array_append "stuff\\nto\\nappend with spaces\\n"
+#-
+{
+    local _params="${@}"
+    func-init
+
+    # function body
+    local -a _realarray_=( "this" "is" "my" "array" )
+    local _array_=_realarray_
+    local _data_="${@}"
+
+    log_fd 2 "original: $(echo -en $(evar "${_array_}[@]"))"
+
+    array_append ${_array_} < <(echo -en "${_data_}") && {
+        log_fd 2 "modified: $(echo -en $(evar "${_array_}[@]"))"
+        log_fd 2 "size: $(evar "#${_array_}[@]")"
+        for (( i=0; i < $(evar "#${_array_}[@]"); i++ )); do
+            log_fd 2 "modified[${i}]: $(echo $(evar "${_array_}[i]"))"
+        done
+        _rtn=0
+    } || {
+        _rtn=$(get_status)
+    }
+
+    func-return
+}
+##------------------------------------------------------------------------------

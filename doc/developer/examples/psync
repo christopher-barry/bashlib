@@ -1,0 +1,168 @@
+#!/bin/bash
+# -*- mode: sh; -*-
+# psync: pull data from your phone to your desktop
+# Dependencies: bashlib, passwordless ssh setup (using keys), rsync
+# Authors: Christopher Barry
+# License: GPLv2 or later
+#
+
+#=================================BEGIN_USAGE===================================
+# NAME
+#   psync - sync all data from phone to desktop using ssh/PKI/rsync
+#
+# SYNOPSIS
+#   psync [-v|-D] [-d] <hostname|last-ip-quad>
+#
+# DESCRIPTION
+#   rsync all image, recordings, and video data to desktop and delete
+#   from phone. Does not sync music. See m2p for music a related
+#   transfer script. Use -v as first parameter to see output on
+#   screen. All output is always logged to ~/log/psync.log.
+#
+# FEATURES
+#   You'll need an ssh server running on your phone, and have your
+#   desktop public key installed in the authorized keys of the
+#   phone. SimpleSSh for android is a good DropBear-based ssh server
+#   implementation.
+#
+# OPTIONS
+#   BUILTINS
+#     [[-v|--verbose]|[-D|--debug]]
+#       Controls extended output verbosity level.
+#       MUST be the FIRST parameter to have any effect.
+#         -v|--verbose
+#           writes logs to screen and ~/log/psync.log
+#         -D|--debug
+#           outputs xtrace data to ~/log/psync.debug
+#           and enables --verbose output as well.
+#
+#     [-h | --help]
+#       Display basic and full usage information respectively and exit.
+#
+#   PROGRAM SPECIFIC
+#     -d
+#       Delete all sync'd data from phone if sync is successful
+#
+# EXAMPLES
+#   psync 108
+#   psync -d phone.myhouse.org
+#
+# FILES
+#   By default, logs to ~/log/psync.log, and debug to ~/log/psync.debug
+#
+# ENVIRONMENT
+#   base.cfg contains basic configuration environmental variables, and
+#   instantates all library functions.
+#
+#   IMPORTANT: set directory/IP variables below in this script
+#
+# EXIT STATUS
+#
+# AUTHORS
+#   christopher barry <christopher.r.barry(at)gmail.com>
+#
+# SEE ALSO
+#
+#==================================END_USAGE====================================
+
+################################################################################
+#     C  O  N  F  I  G  U  R  A  T  I  O  N     A  N  D     S  E  T  U  P      #
+################################################################################
+
+# bash 4.2+ or bail
+check_bash_version || exit 1
+
+# standard config locations
+config /etc/bashlib/base.cfg
+config ~/.config/bashlib/base.cfg
+
+# standard bashlib includes
+import macros
+import logging
+import utilities
+# additional bashlib includes.
+# uncomment them to activate.
+#import net
+#import remote
+
+# builtin verbosity levels
+case "${1}" in
+    -v|--verbose) _VERBOSE_=true; shift ;;
+    -D|--debug)   _DEBUG_=true;   shift ;;
+esac
+
+# initialize logging, debug, and program subsystems
+log_init; log_debug_init; _params="${@}"; prog-init
+
+# builtin help
+show_help "${@}"
+
+################################################################################
+#        P  R  O  G  R  A  M    C  O  N  F  I  G  U  R  A  T  I  O  N          #
+################################################################################
+
+declare _self_="${0}"
+
+# base network
+ip_network="192.168.1."
+
+# ssh port
+ssh_port=22022
+
+# phone dirs
+src_basedir=/sdcard
+src_imgdir=DCIM/OpenCamera
+src_snddir=Recordings
+src_thumbnails=DCIM/.thumbnails
+
+# desktop dirs
+dst_basedir=/home/cbarry/phone
+dst_imgdir=nexus
+dst_snddir=recordings
+
+################################################################################
+#                  P  R  O  G  R  A  M     B  E  G  I  N  S                    #
+################################################################################
+
+[[ "${1}" == "-d" ]] && { shift; cleanup=1; } || :
+
+is_numeric ${1//\./} && {
+    # ip address
+    ip_host="${1}"
+    host=${ip_network}${ip_host}
+} || {
+    # dns name
+    host="${1}"
+}
+
+log "###################### beginning phone sync #####################"
+
+# images
+log "grabbing images and videos..."
+try --eval rsync -azvv -e \'ssh -p ${ssh_port}\' ${host}:${src_basedir}/${src_imgdir}/ ${dst_basedir}/${dst_imgdir}/ || {
+    _rtn=$(get_status)
+    E="copying images failed."
+    error-p
+}
+
+# recordings
+log "grabbing sound recordings..."
+try --eval rsync -azvv -e \'ssh -p ${ssh_port}\' ${host}:${src_basedir}/${src_snddir}/ ${dst_basedir}/${dst_snddir}/ || {
+    _rtn=$(get_status)
+    E="copying recordings failed."
+    error-p
+}
+
+[[ ${cleanup} ]] && {
+    # clean up
+    log "removing data from phone..."
+    try --eval ssh -p${ssh_port} ${host} "'rm -rf ${src_basedir}/{${src_thumbnails},${src_imgdir}/{*.jpg,*.mp4},${src_snddir}/*.ogg}'" || {
+        _rtn=$(get_status)
+        E="deleting data failed."
+        error-p
+    }
+}
+
+log "phone '${host}' sync complete."
+
+prog-exit

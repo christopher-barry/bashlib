@@ -1,0 +1,727 @@
+# -*- mode: sh; -*-
+# Library: debug and logging functions
+# Dependencies: base.cfg, macros
+# Author: Christopher Barry
+# License: GPLv2 or later
+#
+################################################################################
+#    L  O  G  G  I  N  G     F  U  N  C  T  I  O  N     L  I  B  R  A  R  Y    #
+################################################################################
+
+#-------------------------------------------------------------------------------
+function log_init()
+# Description: initializes the logging subsytem. run early.
+# Depends:
+# API:
+#  n/a
+# Inputs:
+#  Environment vars initially set in this file, or optionally uses
+#  syslog.
+# Outputs: Creates a log file in specified directory
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  log_init
+#-
+{
+    # using syslog
+    [[ ${USE_SYSLOG^^} =~ TRUE|YES|ON|1 ]] && {
+        [[ $(which logger &>/dev/null; echo ${?};) -eq 0 ]] && {
+            LOGGER=syslog
+            [[ ${_VERBOSE_^^} =~ TRUE|YES|ON|1 ]] && echo >&2 "logging to: 'syslog'" || :
+        } || {
+            echo >&2 "Warning: syslog 'logger' program not present!"
+            echo >&2 "Warning: falling back to direct file logging!"
+            USE_SYSLOG=false
+        }
+        :
+    }
+
+    # not using syslog
+    [[ ${USE_SYSLOG^^} =~ FALSE|NO|OFF|0 || -z ${USE_SYSLOG} ]] && {
+        LOGGER=direct
+        # initialize direct logging directory
+        [[ ${LOG_FN:="${LOG_DIR:-${HOME}/log}/$(basename ${SOURCE[0]:-${0}}.log)"} ]]
+
+        # verify we can write to the log
+        mkdir -p ${LOG_FN%/*} &>/dev/null && {
+            touch ${LOG_FN} &>/dev/null
+            [[ ${_VERBOSE_^^} =~ TRUE|YES|ON|1 ]] && echo >&2 "logging to: '${LOG_FN}'" || :
+        } || {
+            echo >&2 "Error: unable to write log directory: '${LOG_FN%/*}'"
+            echo >&2 "Error: verify file permissions, disk space, etc."
+            echo >&2 "Error: aborting."
+            exit 1
+        }
+    }
+    :
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function log()
+# Description: command stdout logging filter or normal log message writer.
+# Depends: stdbuf
+#  Soft dependency on 'logger'. Will notice but use builtin routine if
+#  it's not installed. logger is required to log to syslog.
+# Global Variables: Defaults set at top of this library, override as required.
+#   ${_VERBOSE_}  - Output to console too.
+#   ${_DEBUG_}    - Set priority to 'debug', overriding any previous setting.
+#   ${USE_SYSLOG} - true|false.
+#   ${LOG_FACILITY} - See man syslog for valid facilities.
+#   ${LOG_PRIORITY} - See man syslog for valid priorities (levels).
+#   ${LOG_DIR} - Log directory for non-syslog logging.
+#   ${LOG_FN}  - Full filename of the log if not using syslog.
+#   ${LOG_WAIT} - Max time in seconds to block for stdin. Default is 5 sec.
+#   ${DROP_LINES} - regex pattern of noise to never log.
+#   ${iid} - A unique process identifier useful in parallel operations to
+#               identify log entries. See utilities::gen_iid().
+# Notes:
+#  If 'Error' or 'Warning' is the first word of the log string, the output
+#  is sent to the console as well as the log. For 'Error', the priority is
+#  set to 'err', and for 'Warning' priority is set to 'warning'.
+# API:
+#  $* - string to log
+#  or accept on stdin some command's output
+# Examples:
+#  my_command | log
+#  log "this is a message"
+#-
+{
+    minimal-func-init
+
+    # logs message string
+    [[ "${*}" != "" ]] && {
+        [[ "${_DEBUG_}" ]] && local DROP_LINES='^SHOWING_ALL_LINES$'
+        [[ ! "${*}" =~ ${DROP_LINES} ]] && {
+            [[ ${_prio} ]]            || local _prio=${LOG_PRIORITY}
+            [[ ${_prio} == err ]]     && local _VERBOSE_=true
+            [[ "${1}" =~ ^Error ]]    && local _prio=err _VERBOSE_=true
+            [[ "${1}" =~ ^Warning ]]  && local _prio=warning _VERBOSE_=true
+            [[ ${iid} ]]              && local I="${iid}: "
+            [[ ${_DEBUG_^^} =~ TRUE|YES|ON|1 ]]    && local _prio=debug
+            [[ ${_VERBOSE_^^} =~ TRUE|YES|ON|1 ]]  && echo >&2 "${I}${*}"
+
+            log_${LOGGER} "${LOG_FACILITY:-local5}.${_prio:-info}" ${0##*/} "${I}${*}"
+        }
+        # be correctly re-entrant wrt debugging state
+        [[ "${FUNCNAME[1]}" != "${FUNCNAME}" ]] && minimal-func-return
+        return 0
+    }
+
+    # recurse to log stdin
+    local _m=
+    while read -t ${LOG_WAIT:-5} _m
+    do
+        [[ "${_m}" != "" ]] && log "${_m}"
+    done < <(stdbuf -i0 -o0 -e0 cat -)
+
+    minimal-func-return
+    return 0
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function log_syslog()
+# Description: wrap syslog's logger to match generic logger name. internal use.
+# Depends: log(), external 'logger'
+# API:
+#  $1 - facility.priority
+#  $2 - tag (log uses program name)
+# Examples:
+#  log_syslog "user.info" "myscript" "my log string"
+#-
+{
+    local _p="${1}" _t="${2}"; shift 2
+    logger -p "${_p}" -t "${_t}" "${*}"
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function log_direct()
+# Description: internal routine to log to a file and mimic logger. internal use.
+# Depends: log()
+# API:
+#  $1 - facility.priority
+#  $2 - tag (log uses program name)
+# Examples:
+#  log_direct "user.info" "myscript" "my log string"
+#-
+{
+    local _p="${1}" _t="${2}"; shift 2
+    echo "$(date +'%b %d %T') ${_p} ${_t}: ${*}" >>${LOG_FN}
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function log_error()
+# Description: dump pertinent and formatted error data when invoked.
+# Depends:
+# API:
+# [$1] - [--exit|--return] only when used as:
+#                          'return $(log_error --return $? 1 "error mesage")'
+#  $1  - Error code
+#  $2  - Function index
+#  $*  - Error message
+# Outputs: Error messages and stack traces
+# Returns: Transparent to and propagates caller's error code
+# Examples:
+#  As a return/exit trap as defined in the macros (no --exit|--return):
+#   trap 'log_error $? 1 "${E}"' RETURN
+#   See: macros::func-init, minimal-func-init, error-f, error-p
+#  As an error code:
+#   return $(log_error --return ${_rtn} 2 "something bad happened")
+#   exit $(log_error --exit ${_rtn} 1 "something bad happened")
+#-
+{
+    minimal-func-init
+    [[ ${1} =~ (--exit|--return) ]] && { local _rtn_out=true; shift; }
+    (( ${1} >= ENO_TRACE )) && { [[ "${E}" ]] && log "${E}"; minimal-func-return; return ${ENO_TRACE}; }
+    (( ${1} > 0 )) || { minimal-func-return; return 0; }
+
+    local _errcode_=${1}
+    local _funcidx_=${2}; shift 2
+    local _msg_="${*}"
+
+    local _caller="${FUNCNAME[_funcidx_]}"
+    local -a _stack=( "${FUNCNAME[@]:${_funcidx_}}" )
+    local -a _rstack=( $(array_tac _stack) )
+    _rstack=( "${_rstack[@]:0:(( ${#_rstack[@]} -1 ))}" )
+    _rstack[0]="${0##*/}"
+
+    # fake an iid if need be
+    local iid=${iid:-$(log_iid)}
+    local _prio=err
+
+    is_function ${FUNCNAME[_funcidx_]} && {
+        # handle function scope errors
+        log "Error: ${_msg_}"
+        log " |-Function: ${FUNCNAME[_funcidx_]}[${_errcode_}]"
+        log " |-Invoked@: $(evar "${_caller^^}_INVOKED"):$(evar "${_caller^^}_LINENO")"
+        # dump the function's local environment, if available.
+        (( $(evar "#_${_caller}_env[@]") > 0 )) && {
+            log " |-Environment: local@${_caller}"
+            local -i i= _varnum=$(evar \#_${_caller}_env[@])
+            for (( i = 0; i < _varnum ; i++ )); do
+                (( i == (_varnum - 1) )) && {
+                    log " |   \`-$(evar "_${_caller}_env[i]")"
+                } || {
+                    log " |   |-$(evar "_${_caller}_env[i]")"
+                }
+            done
+        }
+        [[ "$(evar "${_caller^^}_DEFINED")" ]] && {
+            local _def_lineno=$(grep --line-number "^function ${_caller}" $(evar "${_caller^^}_DEFINED") || echo "unknown")
+        }
+        log " |-Defined@: $(evar "${_caller^^}_DEFINED"):${_def_lineno%:*}"
+        log " \`-Stack   : ${_rstack[@]/%/ ->} ${_caller}()"
+    } || {
+        # handle program scope errors
+        log "Error: ${_msg_}"
+        log " |-Program : ${0##*/}[${_errcode_}]"
+        log " |-Invoked@: $(evar "${_caller^^}_INVOKED"):$(evar "${_caller^^}_LINENO")"
+        log " \`-Stack   : ${_rstack[@]/%/ ->} self()"
+    }
+
+    # uncomment for help debugging index issues
+    #log "__________________________"
+    #log "#### debugging arrays ####"
+    #log "funcname:      ${FUNCNAME[@]}"
+    #log "script_source: ${SCRIPT_SOURCE}"
+    #log "bash_source:   ${BASH_SOURCE[@]}"
+    #log "bash_lineno:   ${BASH_LINENO[@]}"
+    # _caller_* set when func-info macro runs during each function's
+    # initialization with the func-init macro
+    #log "${_caller}_defined: $(evar "${_caller^^}_DEFINED")"
+    #log "${_caller}_invoked: $(evar "${_caller^^}_INVOKED")"
+    #log "${_caller}_lineno: $(evar "${_caller^^}_LINENO")"
+
+    # we're being used in an exit or return command
+    is_true ${_rtn_out} && echo ${_errcode_}
+
+    log_fd 2 ""
+
+    minimal-func-return
+    return ${_errcode_}
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function log_jiffies()
+# Description: Same as gen_giffies, duplicated here to make 'logging' independent
+# Depends:
+# API:
+#  n/a
+# Inputs: none
+# Outputs: the current date in microseconds since the epoch
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  my_subsecond_timestamp=$(log_jiffies)
+#-
+{
+    date +%s.%N
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function log_iid()
+# Description: generates a random 8-char hex number.
+# Depends: external program: uuidgen
+# API:
+#  n/a
+# Inputs: none
+# Outputs: random 8-char hex number
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  iid=$(log_iid)
+#-
+{
+    local iid=$(uuidgen)
+    echo "${iid:0:8}"
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function log_repeat()
+# Description: repeat a given character n times
+# Depends:
+# API:
+#  $1 - character to repeat
+#  $2 - number of times to repeat it
+# Inputs: none
+# Outputs: string of repeated characters
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  my_line="$(log_repeat "-" 80)"
+#-
+{
+    minimal-func-init
+
+    (( $2 == 0 )) && { minimal-func-return; return 0; }
+    local _char_="${1}"
+    local _count_=${2}
+
+    local _chars=
+    local -i i=
+
+    for (( i = 0; i < _count_; i++ )); do
+        _chars+="${_char_}"
+    done
+
+    echo -n "${_chars}"
+
+    minimal-func-return
+    return 0
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function log_kern()
+# Description: inserts n spaces between characters in message
+# Depends:
+# API:
+#  $1 - number of kerning spaces
+#  $* - the string to kern
+# Inputs: none
+# Outputs: an expanded string
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  log_kern 2 "this is my mesage"
+#  outputs:  "t  h  i  s    i  s    m  y    m  e  s  s  a  g  e"
+#-
+{
+    minimal-func-init
+
+    local _kern_=${1}; shift
+    local _msg_="${*}"
+
+    local _kerned=
+    local -i i=
+
+    for (( i = 0; i < ${#_msg_}; i++ )); do
+        (( ${#_kerned} > 0 )) && {
+            _kerned+="$(log_repeat "${_spc}" ${_kern})${_msg_:${i}:1}"
+        } || {
+            _kerned="${_msg_:${i}:1}"
+        }
+    done
+
+    echo -n "${_kerned}"
+
+    minimal-func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function log_center()
+# Description: tried to center the string within specified columns
+# Depends:
+# API:
+#  $1 - column min/max charcter
+#  $2 - the number of columns to center within
+#  $* - the string to center
+# Inputs: none
+# Outputs: a centered string within min/max chars
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  log_center \# 100 "$(log_kern 1 "my centered and kerned message")"
+#-
+{
+    minimal-func-init
+
+    local _mark_="${1}"
+    local _cols=${2}
+    shift 2
+    local _msg_="${*}"
+
+    (( ${#_msg_} >= ( _cols - 2 )  )) && {
+        local _pre=1
+        local _post=0
+    } || {
+        local _pre=$(( ( ( _cols - 2 ) - ${#_msg_} ) / 2 ))
+        local _post=$(( _cols - ( 1 + _pre + ${#_msg_} + 1 ) ))
+    }
+
+    echo -n "$(log_repeat "${_mark_}" ${_pre})${_msg_}$(log_repeat "${_mark_}" ${_post})"
+
+    minimal-func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function log_banner()
+# Description: format different types of log header
+# Depends:
+# API:
+#  $1 - type:-thin,centered,comment_header
+#  $* - header string
+# Inputs:
+# Outputs: headers of various formats
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  log_banner "hello world"
+#  log_banner comment_header "hello world"
+#-
+{
+    minimal-func-init
+
+    (( $# > 1 )) && { local _type_=${1}; shift; } || local _type_=${LB_DEFAULT:-thin}
+    local -a _msg_="${*}"
+
+    local -i _cols=${LB_COLS:-80}
+
+    local _cmt=${LB_COMMENT:-"#"}
+    local _spc=" "
+    local _til="~"
+    local _dash="-"
+    local _uds="_"
+    local _kern=${LB_KERN:-1}
+
+
+    case ${_type_,,} in
+
+        thin)
+            echo -ne "\n${_cmt} ${_msg_}\n\n"
+            ;;
+        centered)
+            echo -ne "\n${_cmt}$(log_center "${_spc}" ${_cols} "${_msg_}")${_cmt}\n\n"
+            ;;
+        comment_header)
+            echo -ne "\n$(log_repeat "${_cmt}" ${_cols})\n"
+            echo -ne "${_cmt}$(log_center "${_spc}" ${_cols} "$(log_kern ${_kern} "${_msg_^^}")" )${_cmt}\n"
+            echo -ne "$(log_repeat "${_cmt}" ${_cols})\n\n"
+            ;;
+        *)
+            echo -ne "\nUnknown banner type: '${_type_}'\n"
+            echo -ne "Valid types: thin, centered, comment_header\n\n"
+            ;;
+
+    esac
+
+    minimal-func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function log_fd()
+# Description: outputs to a specified file descriptor number
+# Depends:
+# API:
+# [$1] - option to echo -[en]
+#  $1  - fd number
+#  $*  - data to outpur
+# Inputs: data to output
+# Outputs: data to specified fd
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  log_fd 2 "oops, not good. yep, something bad happened."
+#-
+{
+    minimal-func-init
+
+    [[ "${1}" == -[en] ]] && { local _opt_=${1}; shift; }
+    local _fd_=${1}; shift
+    local _msg_="${*}"
+
+    echo >&${_fd_} ${_opt_} "${_msg_}"
+
+    minimal-func-return
+}
+##------------------------------------------------------------------------------
+
+################################################################################
+# D  E  B  U  G  G  I  N  G     F  U  N  C  T  I  O  N     L  I  B  R  A  R  Y #
+################################################################################
+
+#-------------------------------------------------------------------------------
+function log_debug_noise_filter()
+# Description: body of a filtering coprocess to reduce debug noise
+# Depends: bashlib, stdbuf
+# API:
+#  $* - a regular expression of patterns to remove from debug log stream
+# Inputs: 'set -x' output
+# Outputs: filtered 'set -x' output
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  internal use. See log_debug_init for coproc implementation details
+#-
+{
+    minimal-func-init
+
+    local _drop_regex_="${*}"
+
+    local _line=
+    while read -t ${LOG_WAIT:-5} _line
+    do
+        [[ ! "${_line}" =~ ${_drop_regex_} ]] && {
+            echo "${_line}"
+        }
+    done < <(stdbuf -i0 -o0 -e0 cat -)
+
+    minimal-func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function log_debug_init()
+# Description: initialize the debug logging subsystem if _DEBUG_ is set.
+# Depends:
+# API:
+#  n/a
+# Inputs:  environment settings initially from this file
+# Outputs: debug log
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  log_debug_init
+#-
+{
+    [[ ${_DEBUG_^^} =~ TRUE|YES|ON|1 ]] || return 0
+
+    # debug implies verbose too
+    _VERBOSE_=true
+
+    # setup debugging log file.
+    [[ ${DEBUG_FN} ]] || DEBUG_FN="${LOG_DIR:-${HOME}/log}/$(basename ${SOURCE[0]:-${0}}).debug"
+    mkdir -p $(dirname ${DEBUG_FN}) || { log_fd 2 "ERROR: cannot write debug log data to: ${DEBUG_FN}"; exit 1; }
+
+    # put debug log file on fd4.
+    exec 4>${DEBUG_FN}
+
+    # create setx filtering co-process with it's standard output redirected to the debug log.
+    coproc log_debug_noise_filter "${DEBUG_DROP_LINES}" 1>&4
+
+    # close fd4 as coproc stdout (it's redirecting to a file now).
+    exec 4>&-
+
+    # reopen and reuse fd4 as standard input to the coproc, using coproc's builtin fd array.
+    exec 4>&${COPROC[1]}-
+
+    # close coproc's unused stdout.
+    eval "exec ${COPROC[0]}>&-"
+
+    # Setup setx to output to fd4, which will push all of it's output
+    # through our coproc filter to remove unwanted noise. Care should
+    # be taken with the filtering regex (DEBUG_DROP_LINES) so as to
+    # not miss important debugging 'noise'.
+    BASH_XTRACEFD=4
+
+    # turn on subsecond timestamps if set
+    [[ ${DEBUG_TIMESTAMP^^} =~ TRUE|YES|ON|1 ]] && {
+        PS4='+$(log_jiffies)[${LINENO}]:${FUNCNAME:+${FUNCNAME}(): }'
+    } || {
+        PS4='+[${LINENO}]:${FUNCNAME:+${FUNCNAME}(): }'
+    }
+
+    # use log_fd to write to a specific file descriptor
+    log_fd 4 "$(log_banner centered "$(date +'%b %d %T') Debugging: ${0}")"
+
+    # Uncomment these to dump tons more stuff. I didn't
+    # find the extra data all that helpful, but YMMV.
+    #set +T
+    #set +E
+
+    # turn on setx
+    set -o xtrace
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function log_debug_section_header()
+# Description: mark in the debug log when we enter and exit functions
+# Depends:
+# API:
+#  ${1} - 0|1 enter|exit
+#  ${2} - function index
+# Inputs:
+# Outputs:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  internal use
+#-
+{
+    (( $1 > 0 )) && local _way="Exiting" || local _way="Entering"
+    log_fd ${BASH_XTRACEFD} "$(log_banner centered "$(date +'%b %d %s.%N') ${_way} function: ${FUNCNAME[${2}]}${iid:+"[${iid}]"}")"
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function log_debug_control()
+# Description: turn debug output on or off based upon function name
+# Depends:
+# API:
+#  n/a
+# Inputs: ${DEBUG_EXCLUDES[@]} array of function names
+# Outputs: enables / disabled output to debug log
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  log_debug_control
+#-
+{
+    set +o xtrace &>/dev/null
+    [[ ${_DEBUG_^^} =~ TRUE|YES|ON|1 ]] || return 0
+    [[ "${FUNCNAME[1]}" =~ ($(echo "${DEBUG_EXCLUDES[@]/%/|}NONE" | tr -d ' ')) ]] && {
+        log_debug_off 2
+    } || {
+        log_debug_on 2
+    }
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function log_debug_on()
+# Description: turn debug output on
+# Depends:
+# API:
+#  [${1}] - function index
+# Inputs: none
+# Outputs: enables output to debug log
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  log_debug_on
+#-
+{
+    : enabling debugging for: ${FUNCNAME[${1:-1}]:-${0##*/}}
+    set +o xtrace &>/dev/null
+    [[ ${_DEBUG_^^} =~ TRUE|YES|ON|1 ]] || return 0
+    log_debug_section_header 0 $(( ${1:-1} + 1 ))
+    set -o xtrace &>/dev/null
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function log_debug_off()
+# Description: turn debug output off
+# Depends:
+# API:
+#  [${1}] - function index
+# Inputs: none
+# Outputs: none
+# Returns:
+#  0 on success
+# Examples:
+#  log_debug_off
+#-
+{
+    : disabling debugging for: ${FUNCNAME[${1:-1}]:-${0##*/}}
+    set +o xtrace &>/dev/null
+    #log_debug_section_header 1 $(( ${1:-1} + 1 ))
+    :
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function log_debug_get_state()
+# Description: get current state of xtrace
+# Depends:
+# API:
+#  n/a
+# Inputs: none
+# Outputs: 0|1 - 0 = xtrace off, 1 = xtrace on
+# Returns:
+#  0
+# Examples:
+#  local _saved_xtrace_state=$(log_debug_get_state)
+#-
+{
+    shopt -q -o xtrace
+    echo $((${?}^1)) xtrace
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function log_debug_set_state()
+# Description: sets debug output to on or off
+# Depends:
+# API:
+#  ${1} - 0|1 - 0 = off, 1 = on
+# Inputs: int
+# Outputs: none
+# Returns:
+#  0
+# Examples:
+#  log_debug_set_state ${_saved_xtrace_state}
+#-
+{
+    : setting debug state to ${1} for: ${FUNCNAME[1]:-${0##*/}}
+    set +o xtrace &>/dev/null
+    [[ ${_DEBUG_^^} =~ TRUE|YES|ON|1 ]] || return 0
+    (( ${1:-1} == 1 )) && set -o xtrace &>/dev/null
+}
+##------------------------------------------------------------------------------
+
+
+
+# test functions
+function simple_coprocess_echo()
+{
+    local _line
+    while read _line
+    do
+        echo "${_line}"
+    done < <(get_stdin)
+}

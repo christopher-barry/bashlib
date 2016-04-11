@@ -1,0 +1,18 @@
+# single_user_links:
+#   list of symlinks in linkname:source filename format that install
+#   uses when installing bashlib in a user's directory.
+#   * linkname is relative to ~/
+#   * source filename is relative to installed bashlib dir
+# Dependencies: bashlib
+# Authors: Christopher Barry
+# License: GPLv2 or later
+# See Also: single_user_files, system_wide_{files,links}
+
+# linkname:source filename
+.config/bashlib/base.cfg:etc/base.cfg
+bin/functest:bin/functest
+bin/bashdoc:bin/bashdoc
+bin/roto-monkey:bin/roto-monkey
+bin/check-syntax:bin/check-syntax
+bin/psync:doc/developer/examples/psync
+bin/m2p:doc/developer/examples/m2p

@@ -1,0 +1,524 @@
+#!/bin/bash
+# -*- mode: sh; -*-
+# roto-monkey: generate randomly configured rotoscoped images
+# Dependencies: bashlib
+# Authors: Christopher Barry
+# License: GPLv2 or later
+#
+
+#=================================BEGIN_USAGE===================================
+# NAME
+#   roto-monkey - use chance to generate images and save the config with them.
+#
+# SYNOPSIS
+#   roto-monkey [options] <seed_image>
+#
+# DESCRIPTION
+#   MEncoder, autotrace, ffmpeg, gimp, jp2a, python PIL, and other
+#   opensource image manipulation tools can alter images in
+#   innumerable ways. So many different ways in fact, that trying to
+#   determine settings that produce an image style you might like,
+#   without a huge amount of prior experience is literally impossible
+#   to do in a single lifetime. Perhaps a slight exaggeration, but not
+#   by much.
+#
+#   As an attempt at an alternative, and to potentially discover a
+#   roto-scoped look that was not previously considered, roto-monkey
+#   was devloped. roto-monkey is designed to run in the background,
+#   randomly selecting options and values to produce modified images
+#   from a single seed image.
+#
+#   Each image that is produced is named a unique (GUID) name, and
+#   along with it, a similarly named text file is created containing
+#   the command that generated the image. Then, after it runs for
+#   several hours, or possibly even an entire day, one can peruse
+#   directories of thumbnails of the images, allowing one to explore
+#   and zero in on a desired look, and also get a more detailed
+#   understanding of how the options change an original image.
+#
+#   Hopefully this program serves several purposes:
+#
+#   * help me get to a desired look more quickly than I could through
+#     manual trial an error.
+#
+#   * help me to see the effects that options have on an image, and by
+#     extension learn more about how to manually tweak images later.
+#
+#   * let me discover looks I have not even thought about,
+#     e.g. uncover the 'happy accident'.
+#
+#   * allow me to excercise my newly developed bashlib framework
+#     to a positive end.
+#
+#   * and finally, get to a pleasing result faster.
+#
+# FEATURES
+#   Initially there won't be a lot of externally applied features. I
+#   want the program to select as much as possible by itself.
+#
+# OPTIONS
+#   BUILTINS
+#     [[-v|--verbose]|[-D|--debug]]
+#       Controls extended output verbosity level.
+#       MUST be the FIRST parameter to have any effect.
+#         -v|--verbose
+#           writes logs to screen and ~/log/roto-monkey.log
+#         -D|--debug
+#           outputs xtrace data to ~/log/roto-monkey.debug
+#           and enables --verbose output as well.
+#
+#     [-h | --help]
+#       Display basic and full usage information respectively and exit.
+#
+#   ROTO-MONKEY SPECIFIC
+#     <add any roto-monkey options here>
+#
+# EXAMPLES
+#   roto-monkey --verbose processes iterations save_location imgname
+#   roto-monkey -h
+#
+# FILES
+#
+# ENVIRONMENT
+#   base.cfg contains basic configuration environmental variables, and
+#   instantates all library functions.
+#
+# EXIT STATUS
+#
+# AUTHORS
+#   christopher barry <christopher.r.barry(at)gmail.com>
+#
+# SEE ALSO
+#
+#==================================END_USAGE====================================
+
+################################################################################
+#     C  O  N  F  I  G  U  R  A  T  I  O  N     A  N  D     S  E  T  U  P      #
+################################################################################
+
+# for functesting
+:<<'EOF'
+
+# bash 4.2+ or bail
+check_bash_version || exit 1
+# conifgs
+config /etc/bashlib/base.cfg
+config ~/.config/bashlib/base.cfg
+# standard bashlib includes
+import macros
+import logging
+import utilities
+#import net
+#import remote
+import math
+# builtin verbosity levels
+case "${1}" in
+    -v|--verbose) _VERBOSE_=true; shift ;;
+    -D|--debug)   _DEBUG_=true;   shift ;;
+esac
+# initialize logging, debug, and program subsystems
+log_init; log_debug_init; _params="${@}"; prog-init
+# builtin help
+show_help "${@}"
+
+EOF
+
+################################################################################
+#                 P  R  O  G  R  A  M     B  E  G  I  N  S                     #
+################################################################################
+
+#-------------------------------------------------------------------------------
+function n_monkies()
+# Description: run multiple monkey processes simulataneously
+# Depends: bashlib, parallel
+# API:
+#  $1 - input file(s)
+#  $2 - output format
+#  $(stdin) - cmdname args
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#   n_monkies 6 15 mycmd arg1 ... argn
+#-
+{
+    local _params="${@}"
+    func-init
+    trap '{ echo "Completing active jobs and winding down ${FUNCNAME}..."; killall -TERM parallel; }' INT
+
+    local _input_file_=
+    _input_file_=$(readlink -e "${1}") || { _rtn=${ENO_TRACE} E="${FUNCNAME}: file not found '${1}'"; error-p; }
+
+    seq 100 | parallel -j7 functest -i ~/bin/roto-monkey run_random_rotoscope ${_input_file_} svg
+
+    echo "parallel PID: $$"
+
+    func-return
+}
+
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function run_random_rotoscope()
+# Description: run rotoscope with randomly generated params against a
+#              single image.
+# Depends: bashlib, autotrace
+# API:
+#  $1 - input file
+#  $2 - output filetype {svg}
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _input_file_=
+    _input_file_=$(readlink -e ${1}) || { _rtn=${ENO_TRACE} E="${FUNCNAME}: file not found '${1}'"; error-p; }
+    local _output_format_=${2:-svg}
+    local _run_number=${3}
+    local _uuid=$(gen_uuid)
+    local _output_file_=${_input_file_%/*}/${_uuid}.${_output_format_}
+    local _cfg_file_=${_output_file_%.*}.cfg
+
+    rotoscope ${_input_file_} ${_output_format_} ${_output_file_} ${_cfg_file_} $(set_random_rotoscope_opts)
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function set_random_rotoscope_opts()
+# Description: recreate the opts array with new, random values each cycle.
+# Depends: bashlib, autotrace
+# API:
+#  [$1] - output format [eps|{svg}|dxf|pdf]
+# Inputs:   optional output format
+# Outputs:  updates a global a random options string array
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local -a _rotoscope_opts=()
+    local _fn=$(gen_tempfile)
+
+    # 'man autotrace' for full descriptions.
+    # randomly set each option
+    _rotoscope_opts=(
+        #-output-format filetype
+        #"-output-format ${_output_format_:=svg} "
+        #-background-color hexvalue_color {none}
+        "-background-color $(gen_random_hex 6) "
+        #-centerline toggle {outline}
+        #"-centerline "
+        #-color-count int_colors 1-256 {all colors}
+        "-color-count $(gen_random_int 256) "
+        #-corner-always-threshold int_angle {60}
+        "-corner-always-threshold $(gen_random_int 179) "
+        #-corner-surround int_pixels {4}
+        "-corner-surround $(gen_random_int 10) "
+        #-corner-threshold int_angle {100}
+        "-corner-threshold $(gen_random_int 179) "
+        #-despeckle-level int 1-20 {none}
+        "-despeckle-level $(gen_random_int 20) "
+        #-despeckle-tightness real 0.0-8.0 {2.0}
+        "-despeckle-tightness $(gen_random_float 8 2) "
+        #-dpi int {system-dpi}
+        #-error-threshold real_pixels {2.0}
+        "-error-threshold $(gen_random_float 2 1) "
+        #-filter-iterations int {4}
+        "-filter-iterations $(gen_random_int 25) "
+        #-line-reversion-threshold real {0.01}
+        "-line-reversion-threshold $(gen_random_float 1 2) "
+        #-line-threshold real {1.0}
+        "-line-threshold $(gen_random_float 2 1) "
+        #-preserve-width toggle
+        "-preserve-width "
+        #-remove-adjacent-corners toggle
+        "-remove-adjacent-corners "
+        #-report-progress toggle
+        "-report-progress "
+        #-tangent-surround int {3}
+        "-tangent-surround $(gen_random_int 10) "
+        #-width-factor real {none} <- option in manpage, but throws error if set
+        #"-width-factor $(gen_random_float 1 2) "
+    )
+
+    # init tempfile with output format
+    > "${_fn}"
+    # randomly select 'n' options
+    local -i c= _max=
+    until (( ${c} > ${#_rotoscope_opts[@]} )) || (( _max > (${#_rotoscope_opts[@]} * 2) )); do
+        c=$(gen_random_int $(( ${#_rotoscope_opts[@]} + $(gen_random_int 5) )) )
+        echo "${_rotoscope_opts[c]}" >> "${_fn}"
+        ((_max++))
+    done
+
+    # output unique option set
+    sort -u "${_fn}"
+    rm -f "${_fn}"
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function rotoscope()
+# Description:
+# Depends: bashlib, autotrace
+# API:
+#  $1 -
+#  $2 -
+#  $3 -
+#  $4 -
+#  $5 -
+#  $@ -
+#  $* -
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _input_file_=
+    _input_file_=$(readlink -e ${1}) || { _rtn=${ENO_TRACE} E="${FUNCNAME}: file not found '${1}'"; error-p; }
+    local _output_format_=${2}
+    local _output_file_=${3}
+    # if cfg param is on
+    [[ "${4:0:1}" != "-" ]] && {
+        local _cfg_file_=${4}
+        touch ${_cfg_file_}
+        shift 4
+    } || {
+        shift 3
+    }
+
+    [[ -e ${_cfg_file_} ]] && {
+        echo "
+-output-format ${_output_format_}
+-output-file ${_output_file_}
+${@}
+${_input_file_}
+" >> "${_cfg_file_}"
+    }
+
+    log_fd 2 "${FUNCNAME}: -output-format ${_output_format_} -output-file ${_output_file_} ${@} ${_input_file_}"
+
+    autotrace -output-format ${_output_format_} \
+              -output-file ${_output_file_} \
+              "${@}" \
+              ${_input_file_}
+
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function video_to_images()
+# Description: slice a video into consecutive stills
+# Depends: bashlib, mplayer
+# API:
+#  $1 - video file
+#  $2 - output format (jpeg, png, bmp, etc.)
+# Inputs:  video file
+# Outputs: an image per frame into the current directory
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#   video_to_images myfilm.mp4 jpeg
+#-
+{
+    local _params="${@}"
+    func-init
+
+    verify_argc $# 2 || { _rtn=${ENO_TRACE} E="${FUNCNAME}: <video_filename> <jpeg|jpg|png|bmp> not: '${@}'"; error-p; }
+
+    local _video_fn_=
+    local _output_format_=
+
+    _video_fn_=$(readlink -e ${1}) || { _rtn=${ENO_TRACE} E="${FUNCNAME}: file not found: '${1}'"; error-p; }
+    _output_format_=${2}
+
+    [[ "${_output_format_}" =~ jpeg|jpg|png|bmp ]] || { _rtn=${ENO_TRACE} E="${FUNCNAME}: bad format: '${2}'"; error-p; }
+
+    # do it
+    mplayer "${_video_fn_}" -nosound -vo ${_output_format_}
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function jpeg_to_ascii()
+# Description:
+# Depends: bashlib, jp2a
+# API:
+#  $1 - width {174}
+#  $@ - list of jpeg files to process
+# Inputs:  jpeg file(s)
+# Outputs: ascii rendition(s) of the jpeg image(s) to disk.
+#          each filename is echo'd to stdout after file output to disk
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#   ascii_from_jpeg *.jpeg
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _def_width=174
+
+    is_decimal ${1} && { local _width_=${1}; shift; } || local _width_=${_def_width}
+
+    for f in "${@}"; do
+        f=$(readlink -e ${f})
+        log_fd 2 "processing: ${f} to ${f%.*}.ascii"
+        jp2a --width=${_width_} --output=${f%.*}.ascii ${f}
+        log_fd 1 "${f%.*}.ascii"
+    done
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function ascii_to_png()
+# Description: parse ascii image rendition into png
+# Depends: bashlib, python3
+# API:
+#  $@ - list of ascii image files to process
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  ascii_to_png *.ascii
+#  ascii_to_png < <(jpeg_to_ascii *.jpeg)
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local -a _file_list_=()
+
+    (( $# )) && {
+        readarray _file_list_ < <(echo "${@}")
+    } || {
+        readarray _file_list_ < <(get_stdin);
+    }
+
+    while read f; do
+
+        [[ ${f} ]] || { _rtn=0; error-f; }
+        f=$(readlink -e ${f})
+
+        log_fd 2 "processing ${f} to ${f%.*}.png"
+
+        cat ${f} | python3 -c "import sys; from PIL import Image, ImageDraw, ImageFont; img=Image.new('RGB',(866,1538)); draw = ImageDraw.Draw(img); font = ImageFont.truetype('/usr/share/fonts/truetype/freefont/FreeMono.ttf', 8); [draw.text((0, i[0]*10), i[1].rstrip('\n'), (255,255,255), font=font) for i in enumerate(sys.stdin)]; img.save('${f%.*}.png')";
+
+    done < <(echo "${_file_list_[@]}")
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+
+
+
+
+
+# exit macro
+# prog-exit
+
+:<<EOF
+
+-output-format svg
+-output-file /home/cbarry/tmp/roto/pitch_number-5/a7dcbe10-7f8c-44ea-a430-a88ce63dbf55.svg
+-color-count 14 -corner-always-threshold 90 -corner-surround 8 -corner-threshold 11 -error-threshold 1.8 -filter-iterations 4 -line-threshold 1.2 -preserve-width -remove-adjacent-corners -tangent-surround 5
+/home/cbarry/tmp/roto/pitch_number-5/00005317.jpg
+
+output-format svg
+-output-file /home/cbarry/tmp/roto/pitch_number-5/a61d7999-620e-4d94-b23e-6002bb5a0d1d.svg
+-color-count 71 -corner-always-threshold 41 -despeckle-level 20 -error-threshold 1.7 -report-progress
+/home/cbarry/tmp/roto/pitch_number-5/00005317.jpg
+
+-output-format svg
+-output-file /home/cbarry/tmp/roto/pitch_number-5/ba449401-d852-4a41-9063-cc7548d5e4ea.svg
+-color-count 113 -corner-always-threshold 40 -corner-surround 3 -error-threshold 1.6 -line-reversion-threshold 0.16 -line-threshold 1.6 -report-progress -tangent-surround 3
+/home/cbarry/tmp/roto/pitch_number-5/00005317.jpg
+
+-output-format svg
+-output-file /home/cbarry/tmp/roto/pitch_number-5/52832ad4-5ac4-48c5-b762-3aa183cbad30.svg
+-color-count 106 -corner-always-threshold 157
+/home/cbarry/tmp/roto/pitch_number-5/00005317.jpg
+
+-output-format svg
+-output-file /home/cbarry/tmp/roto/pitch_number-5/c4d08c05-f45c-4626-b7f7-52d402e1182a.svg
+-color-count 125 -corner-surround 6 -corner-threshold 13 -despeckle-level 11 -error-threshold 1.3 -preserve-width -report-progress
+/home/cbarry/tmp/roto/pitch_number-5/00005317.jpg
+
+-output-format svg
+-output-file /home/cbarry/tmp/roto/pitch_number-5/eb51cb5c-2018-4e37-ba3c-5b88153ead88.svg
+-color-count 133 -despeckle-level 15 -error-threshold 1.4 -report-progress
+/home/cbarry/tmp/roto/pitch_number-5/00005317.jpg
+
+
+
+
+intro
+symbiaudix / earborg
+
+history
+@23, fixated stapes
+175,000 hours wear time
+problems with comfort, quality
+integration mostly non-existent
+my skillset
+help me
+money or
+work with me
+build a team
+hardware/software/marketing/finances
+
+hackable linux machines audio optimized
+mesh technologies / TOR-like
+rings of trust
+full encryption
+distributed storage
+integration / synchronization with desktop system
+personal cloud
+
+
+
+EOF

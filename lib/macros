@@ -1,0 +1,125 @@
+# -*- mode: sh; -*-
+# Library: various macro aliases
+# Dependencies: base.cfg
+# Author: Christopher Barry
+# License: GPLv2 or later
+#
+################################################################################
+#       M  A  C  R  O     F  U  N  C  T  I  O  N     L  I  B  R  A  R  Y       #
+################################################################################
+
+# macros (aliases) behave like subroutines executed in the current
+# scope. They also seriously reduce the boilerplate footprint in each
+# function definition, and make global changes simpler. For standard
+# function init and return/exit code, they can do things that using
+# another function there just can't do. Their beauty is that they
+# exist and execute in their containing function's scope, and don't
+# define a new, nested scope of their own, yet you can nest them for
+# reusability and structure, and still maintain a flat scope!  Sure,
+# thay can't accept parameters, but they can embed variable names that
+# can actually reflect a local variable in the function they are
+# executing in. They're nifty, useful, and I really like 'em.
+
+# ...and you thought they were little more than: alias ll='ls -la'
+
+# Their naming convention in bashlib is always hyphen-separated
+# lowercase-words. This separates them easily in the codebase, and
+# makes custom syntax highlighting routines work easier.
+
+# this option allows aliases non-interactively.
+shopt -s expand_aliases
+
+## BEGIN MACRO DEFINITIONS ##
+
+#-------------- program boilerplate
+# init header for programs
+alias prog-init='declare _dbgstate=$(log_debug_get_state) SCRIPT_SOURCE="${0}"; log_debug_control; func-info; declare E="${0##*/} ${_params} failed" _rtn=; trap "log_error \${_rtn:-\${?}} 1 \${E}" EXIT'
+
+# composite on-error macro for programs
+alias error-p='get-return-status; E=${E:-"Error: ${0##*/}: ${_params} failed"}; log_debug_set_state ${_dbgstate}; remove_macros; exit ${_rtn}'
+
+# exit footer for programs
+alias prog-exit='error-p'
+
+#-------------- function boilerplate
+# define func-named vars for each invoked function
+alias func-info='_this_=${FUNCNAME:-${0##*/}}; _this_=${_this_//[[:punct:]]/_}; declare -g ${_this_^^}_DEFINED="${BASH_SOURCE:-${SCRIPT_SOURCE}}"; declare -g ${_this_^^}_INVOKED="${BASH_SOURCE[1]:-${SCRIPT_SOURCE}}"; declare -g ${_this_^^}_LINENO="${BASH_LINENO:-1}"'
+
+# init header macro for functions
+alias func-init='local _dbgstate=$(log_debug_get_state); log_debug_control; func-info; local _err="Error:" _warn="Warning:" E="${FUNCNAME}: ${_params} failed" _rtn= ; trap "log_error \${_rtn:-\${?}} 1 \${E}" RETURN'
+
+# composite on-error macro for functions
+alias error-f='get-return-status; E=${E:-"${FUNCNAME} ${_params} failed"}; get-env-local; log_debug_set_state ${_dbgstate}; return ${_rtn}'
+
+# return footer macro for functions
+alias func-return='error-f'
+
+#-------------- minimal function boilerplate
+# special case init heaqder for simple functions
+alias minimal-func-init='local _dbgstate=$(log_debug_get_state); log_debug_control; func-info'
+
+# special case return footer for simple functions
+alias minimal-func-return='log_debug_set_state ${_dbgstate}'
+
+#-------------- status
+# examine the last executed pipeline for error conditions
+alias get-return-status='_rtn=$(get_status)'
+
+#-------------- environment dumping tools
+# dump alias names defined in the environment
+alias get-env-alias-names='alias |  awk -F= "{ print \$1 }" | awk -F[[:blank:]] "{ print \$2 }"'
+
+# dump indexed array names defined in the environment
+alias get-env-array-names='declare -a | awk -F= "{ print \$1 }" | awk -F[[:blank:]] "{ print \$3 }"'
+
+# dump exported names defined in the environment
+alias get-env-exported-names='declare -x | awk -F= "{ print \$1 }" | awk -F[[:blank:]] "{ print \$3 }"'
+
+# dump function names defined in the environment
+alias get-env-function-names='declare -F | awk -F[[:blank:]] "{ print \$3 }"'
+
+# dump associative array names defined in the environment
+alias get-env-hash-names='declare -A | awk -F= "{ print \$1 }" | awk -F[[:blank:]] "{ print \$3 }"'
+
+# dump integer names defined in the environment
+alias get-env-integer-names='declare -i | awk -F= "{ print \$1 }" | awk -F[[:blank:]] "{ print \$3 }"'
+
+# dump readonly names defined in the environment
+alias get-env-readonly-names='declare -r | awk -F= "{ print \$1 }" | awk -F[[:blank:]] "{ print \$3 }"'
+
+# dump regular var names defined in the environment
+alias get-env-regular-names='declare -p | awk -F= "{ print \$1 }" | grep "^declare[[:blank:]][\-]\{2\}[[:blank:]].*$" | awk "{ print \$3 }"'
+
+# generate an array of all set local variables
+alias get-env-local='readarray _${FUNCNAME}_env < <(local|grep -v '^E=.*$')'
+
+## END MACRO DEFINITIONS ##
+
+# on every load of this file, automatically create an up-to-date array
+# of all the alias names defined in this file, so they can be
+# destroyed on the way out.
+# this code must be after all the alias definitions
+begin='begin macro'
+end='end macro'
+while read line; do
+    [[ "${line}" =~ ${begin^^} ]] && state=start
+    [[ "${line}" =~ ${end^^} ]]   && state=stop
+    case ${state} in
+        start)
+            state=started
+            ;;
+        started)
+            [[ ! "${line}" =~ ((^\#.*$)|(^$)) ]] && [[ "${line}" =~ ^alias.*$ ]] && {
+                MACRO_NAMES+=( $(echo "${line}" | awk '{print $2}' | awk -F= '{print $1}') )
+            }
+            ;;
+        stop)
+            break
+            ;;
+    esac
+done < <( cat $(ipath macros) )
+
+begin= end= state= line=
+
+# called to cleanup from error-p, and prog-exit macro definitions
+function remove_macros() { shopt -u expand_aliases; unalias ${MACRO_NAMES[@]} &>/dev/null; }

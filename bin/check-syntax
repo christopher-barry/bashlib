@@ -1,0 +1,205 @@
+#!/bin/bash
+# -*- mode: sh; -*-
+# check_syntax: bash script syntax checker
+# Dependencies: bashlib
+# Authors: Christopher Barry
+# License: GPLv2 or later
+#
+
+#=================================BEGIN_USAGE===================================
+# NAME
+#   check-syntax - verifies syntax correctness on files in spec'd directories
+#
+# SYNOPSIS
+#   check-syntax [-h|--help]
+#   check-syntax [[-v|--verbose]|[-D|--debug]] [<-m|--maxdepth> depth] dir [dir2 .. dirN]
+#
+# DESCRIPTION
+#   parses all shell scriptss in specified directory(s) looking for
+#   syntax errors.
+# FEATURES
+#
+# OPTIONS
+#   BUILTINS
+#     [[-v|--verbose]|[-D|--debug]]
+#       Controls extended output verbosity level.
+#       MUST be the FIRST parameter to have any effect.
+#         -v|--verbose
+#           writes logs to screen and ~/log/program-name.log
+#         -D|--debug
+#           outputs xtrace data to ~/log/program-name.debug
+#           and enables --verbose output as well.
+#
+#     [-h | --help]
+#       Display basic and full usage information respectively and exit.
+#
+#   PROGRAM SPECIFIC
+#     [<-m|--maxdepth> depth]
+#       Search this many dirs below dirs specified. Defaults to all dirs.
+#
+# EXAMPLES
+#   check-syntax --verbose --maxdepth 1 /usr/src/scripts
+#   check-syntax -h
+#
+# FILES
+#
+# ENVIRONMENT
+#   base.cfg contains basic configuration environmental variables, and
+#   instantates all library functions.
+#
+# EXIT STATUS
+#
+# AUTHORS
+#   christopher barry <christopher.r.barry(at)gmail.com>
+#
+# SEE ALSO
+#
+#==================================END_USAGE====================================
+
+################################################################################
+#     C  O  N  F  I  G  U  R  A  T  I  O  N     A  N  D     S  E  T  U  P      #
+################################################################################
+
+# bash 4.2+ or bail
+check_bash_version || exit 1
+
+config /etc/bashlib/base.cfg
+config ~/.config/bashlib/base.cfg
+
+# standard bashlib includes
+import macros
+import logging
+import utilities
+# additional bashlib includes.
+# uncomment them to activate.
+#import net
+#import remote
+
+# builtin verbosity levels
+case "${1}" in
+    -v|--verbose) _VERBOSE_=true; shift ;;
+    -D|--debug)   _DEBUG_=true;   shift ;;
+esac
+
+# initialize logging, debug, and program subsystems
+log_init; log_debug_init; _params="${@}"; prog-init
+
+# builtin help
+show_help "${@}"
+
+################################################################################
+#                 P  R  O  G  R  A  M     B  E  G  I  N  S                     #
+################################################################################
+
+#-------------------------------------------------------------------------------
+function cs_get_filelist()
+# Description: get list of files from dirs on commanline
+# Depends: bashlib,
+# API:
+#  [<$1 $2> -m|--maxdepth depth]
+#  $@ - dir1 [dir2 ... dirN]
+# Inputs: directory(s) of files to check
+# Outputs: list of file found
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  cs_get_filelist -m 3 ~/src/scripts
+#-
+{
+    local _params="${@}"
+    minimal-func-init
+
+    case "${1}" in
+        -m|--maxdepth) local _depth_=${2}; shift 2 ;;
+    esac
+
+    find "${@}" ${_depth_:+-maxdepth ${_depth_}} -type f
+
+    minimal-func-return
+    return 0
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function cs_test_syntax()
+# Description: test syntax of script with bash
+# Depends: bashlib,
+# API:
+#  $1 - file to test
+# Inputs: full path to filename
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  cs_test_syntax myscript
+#-
+{
+    local _params="${@}"
+    minimal-func-init
+
+    verify_argc $# 1 || { log "${FUNCNAME}: missing filername"; return 1; }
+
+    local _rslt=
+    is_sourceable "${1}" && {
+        _rslt=$(bash -n "${1}" 2>&1)
+        [[ -z ${_rslt} ]] && {
+            log "PASSED:   ${1}"
+            _rtn=0
+        } || {
+            log "FAILED:   ${1} had the following error(s):"
+            log "${_rslt}"
+            E= _rtn=${ENO_TRACE}
+        }
+    } || {
+        log "SKIPPING: ${1}"
+        _rtn=0
+    }
+
+    minimal-func-return
+    return ${_rtn}
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function cs_main()
+# Description: main function
+# Depends: bashlib,
+# API:
+#  [$1 $2] - [<-m|--maxdepth> depth]
+#  $@ - directory(s)
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  cs_main "${@}"
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local -i _count=0 _errcount=0
+    local _src=
+    for _src in $(cs_get_filelist "${@}"); do
+        ((_count++))
+        cs_test_syntax "${_src}" || ((_errcount++))
+    done
+    log "Processed ${_count} files."
+    ((_errcount)) && {
+        log "Files with errors: ${_errcount}"
+    } || { _rtn=0; :; }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+cs_main "${@}"
+
+# exit macro
+prog-exit

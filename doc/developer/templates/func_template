@@ -1,0 +1,31 @@
+# -*- mode: sh; -*-
+#-------------------------------------------------------------------------------
+function template_func()
+# Description: Standard function template
+# Depends: bashlib,
+# API:
+#  $1 -
+#  $2 -
+#  $3 -
+#  $4 -
+#  $5 -
+#  $@ -
+#  $* -
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    func-init
+
+    # function body
+
+    func-return
+}
+##------------------------------------------------------------------------------

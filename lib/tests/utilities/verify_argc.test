@@ -1,0 +1,49 @@
+# -*- mode: sh; -*-
+import math
+#-------------------------------------------------------------------------------
+function test_verify_argc()
+# Description:
+# Depends: bashlib
+# API:
+#  n/a
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples: run via functest
+#   functest -D -i verify_argc.test test_verify_argc
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local -i _num _min _max
+
+    log_fd 2 "testing: verify_argc args min max"
+    log_fd 2 "================================="
+    while read _num _min _max; do
+        log_fd 2 "testing: verify_argc $_num $_min $_max"
+        verify_argc $_num $_min $_max && {
+            _rtn=${?}
+            E="[${_rtn}] passed"
+        } || {
+            _rtn=${?}
+            E="[${_rtn}] failed"
+        }
+    done < <(for x in {1..5}; do
+                 line= int=
+                 for j in {1..3}; do
+                     int=$(gen_random_int 5)
+                     line="${line} "$int
+                 done
+                 echo ${line}
+             done
+            )
+
+    log "${E}"
+
+    func-return
+}
+##------------------------------------------------------------------------------

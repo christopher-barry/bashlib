@@ -1,0 +1,146 @@
+#!/bin/bash
+# -*- mode: sh; -*-
+# program-name: bash script bashlib template
+# Dependencies: bashlib
+# Authors: Christopher Barry
+# License: GPLv2 or later
+#
+
+#=================================BEGIN_USAGE===================================
+# NAME
+#   program-name - short-description
+#
+# SYNOPSIS
+#   program-name [options]
+#
+# DESCRIPTION
+#
+# FEATURES
+#
+# OPTIONS
+#   BUILTINS
+#     [[-v|--verbose]|[-D|--debug]]
+#       Controls extended output verbosity level.
+#       MUST be the FIRST parameter to have any effect.
+#         -v|--verbose
+#           writes logs to screen and ~/log/program-name.log
+#         -D|--debug
+#           outputs xtrace data to ~/log/program-name.debug
+#           and enables --verbose output as well.
+#
+#     [-h | --help]
+#       Display basic and full usage information respectively and exit.
+#
+#   PROGRAM SPECIFIC
+#     <add any program-name options here>
+#
+# EXAMPLES
+#   program-name --verbose -l foo -r bar
+#   program-name -h
+#
+# FILES
+#
+# ENVIRONMENT
+#   base.cfg contains basic configuration environmental variables, and
+#   instantates all library functions.
+#
+# EXIT STATUS
+#
+# AUTHORS
+#   christopher barry <christopher.r.barry(at)gmail.com>
+#
+# SEE ALSO
+#
+#==================================END_USAGE====================================
+
+#================= T  E  M  P  L  A  T  E     N  O  T  E  S ====================
+#                                                                              ^
+# Use func_template template for all function definitions.  The format         |
+# allows bashdoc to output formatted API documentation automatically,          |
+# and the defined trap, debug, and error macros provide automatic stack        |
+# traces when things go awry, plus customizable full debug logging.            R
+#
+# See bashlib/macros for the list of available macros. Examine also            E
+# the differences between: 'func-init' and 'minimal-func-init' macro
+# aliases, and 'func-return' and 'minimal-func-return' macro                   M
+# aliases. Then look through the library to see what types of
+# functions use each pair and why.                                             O
+#
+# See bashlib/logging:log_error() for how the RETURN and EXIT traps            V
+# defined in the macros automatically output detailed stack traces on
+# error.                                                                       E
+#
+# See bashlib/utilities:show_embedded_comments() for how bashdoc
+# parses the target script to produce API documentation. See bashdoc           M
+# for the regular expression patterns it's keying off.
+#                                                                              E
+# See bashlib/utilities:usage() for how it automatically outputs terse         |
+# and verbose formatted usage information for this script by parsing           |
+# this script's header comments.                                               |
+#                                                                              v
+#================= T  E  M  P  L  A  T  E     N  O  T  E  S ====================
+
+################################################################################
+#     C  O  N  F  I  G  U  R  A  T  I  O  N     A  N  D     S  E  T  U  P      #
+################################################################################
+
+# bash 4.2+ or bail
+check_bash_version || exit 1
+
+# Layer on available configuration in lowest to highest precedence
+# order. Adjust/limit to taste. base.cfg sets required env vars for
+# the imported libraries. Other configs can override lib vars (and
+# functions too, if the config file modifying the function is loaded
+# after the lib is imported), or pull in script-specific vars and
+# functions as desired.
+# Uncomment below, or use your own naming convention.
+config /etc/bashlib/base.cfg
+#config /etc/bashlib/${0##*/}.cfg
+config ~/.config/bashlib/base.cfg
+#config ~/.config/bashlib/${0##*/}.cfg
+#config ${0%/*}/${0##*/}.cfg
+
+# standard bashlib includes
+import macros
+import logging
+import utilities
+# additional bashlib includes.
+# uncomment them to activate.
+#import data_structures
+#import math
+#import net
+#import parallel
+#import remote
+
+# builtin verbosity levels
+case "${1}" in
+    -v|--verbose) _VERBOSE_=true; shift ;;
+    -D|--debug)   _DEBUG_=true;   shift ;;
+esac
+
+# initialize logging, debug, and program subsystems
+log_init; log_debug_init; _params="${@}"; prog-init
+
+# builtin help
+show_help "${@}"
+
+
+################################################################################
+#        P  R  O  G  R  A  M    C  O  N  F  I  G  U  R  A  T  I  O  N          #
+################################################################################
+
+declare _self_="${0%*/}"
+declare _session_id_=$(gen_iid)
+
+
+################################################################################
+#                 P  R  O  G  R  A  M     B  E  G  I  N  S                     #
+################################################################################
+
+log_banner centered "Beginning session ${_session_id_} of ${_self_}" | log
+declare iid=${_session_id_}
+
+
+
+# exit macro
+prog-exit

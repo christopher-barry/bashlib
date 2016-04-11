@@ -1,0 +1,263 @@
+#!/bin/bash
+# -*- mode: sh; -*-
+# bashdoc: bash script documentation viewer
+# Dependencies: bashlib
+# Authors: Christopher Barry
+# License: GPLv2 or later
+#
+################################################################################
+#     B  A  S  H  L  I  B     D  O  C  U  M  E  N  T     V  I  E  W  E  R      #
+################################################################################
+
+#==============================BEGIN_USAGE==============================
+# NAME
+#   bashdoc
+#
+# SYNOPSIS
+#   bashdoc [-v|--verbose]|[-D|--debug] <option> <scriptfile>
+#   bashdoc -h|--help
+#   bashdoc -A <scriptfile>
+#   bashdoc -F <funcname> <scriptfile>
+#   bashdoc -U <scriptfile>
+#   bashdoc -u <scriptfile>
+#   bashdoc -p <regex-profile-file> <scriptfile>
+#   bashdoc [-s] [-1] <'begin-regex'> <'end-regex'> <scriptfile>
+#
+# DESCRIPTION
+#   Displays embedded documentation in scripts. In it's simplest form,
+#   it uses begining and ending regular expressions to isolate and
+#   output blocks of information found in the file.
+#
+# FEATURES
+#   Has a number of switches to output different types of standard
+#   documentation within scripts adhering to baslib comment format.
+#   Also allows adhoc regular expressions (e.g. using the last form of
+#   invocation noted in 'synopsis' above) to extract specific
+#   data. Also allows re-using previously created named profiles of
+#   specific use-case option and regular expression command lines.
+#
+# OPTIONS
+#   BUILTINS
+#     [[-v|--verbose]|[-D|--debug]]
+#       Controls extended output verbosity level.
+#       MUST be the FIRST parameter to have any effect.
+#         -v|--verbose
+#           writes logs to screen and ~/log/bashdoc.log
+#         -D|--debug
+#           outputs xtrace data to ~/log/bashdoc.debug
+#           and enables --verbose output as well.
+#
+#     [-h | --help]
+#       Display basic and full usage information respectively and exit.
+#
+#   PROGRAM SPECIFIC
+#     -A  Show all API documentation for <scriptfile>
+#
+#     -F  Show API documentation for specified <funcname> in <scriptfile>
+#
+#     -u  Show abbreviated usage help for <scriptfile>
+#
+#     -U  Show full usage help for <scriptfile>
+#
+#     -s  Skip displaying the begin and end markers in the output
+#
+#     -1  Show the first match only
+#
+#     -p  Load and use options and regex information from saved profile.
+#         Profile file format is single line with options and regexes.
+#         Example file: firstnote.regex
+#           -s -1 '^##===.*Note.*\$' '^##end\$'
+#
+# EXAMPLES
+#   bashdoc -s '^#----*\$' '^#-\$' myscript
+#   bashdoc -A myscript
+#   bashdoc -p firstnote.regex myscript
+#
+# FILES
+#   bashlib suite
+#
+# ENVIRONMENT
+#
+# EXIT STATUS
+#  0 on success
+#
+# AUTHORS
+#   christopher barry  <christopher.r.barry(at)gmail.com>
+#
+# SEE ALSO
+#   Each individual library source file
+#
+#==============================END_USAGE==============================
+
+################################################################################
+#     C  O  N  F  I  G  U  R  A  T  I  O  N     A  N  D     S  E  T  U  P      #
+################################################################################
+
+# bash 4.2+ or bail
+check_bash_version || exit 1
+
+# std configs
+config /etc/bashlib/base.cfg
+config ~/.config/bashlib/base.cfg
+
+# standard bashlib includes
+import macros
+import logging
+import utilities
+# additional bashlib includes.
+# uncomment them to activate.
+#import net
+#import remote
+
+# builtin verbosity levels
+case "${1}" in
+    -v|--verbose) _VERBOSE_=true; shift ;;
+    -D|--debug)   _DEBUG_=true;   shift ;;
+esac
+
+# initialize logging, debug, and program subsystems
+log_init; log_debug_init; _params="${@}"; prog-init
+
+# builtin help
+show_help "${@}"
+
+################################################################################
+#        P  R  O  G  R  A  M    C  O  N  F  I  G  U  R  A  T  I  O  N          #
+################################################################################
+
+declare _self_="${0}"
+
+# separates API chunks in output
+declare BASHDOC_SEPARATOR="================================================================================"
+
+################################################################################
+#               P  R  O  G  R  A  M     B  E  G  I  N  S                       #
+################################################################################
+
+#-------------------------------------------------------------------------------
+function show_full_api()
+# Description: show the full API docs for specified script
+# Depends: bashlib
+# API:
+#  $1 - scriptfile
+# Inputs:
+# Outputs: all API docs in 'scriptfile'
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  show_full_api myscript
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _fn="$(readlink -e "${1}")"
+    is_sourceable "${_fn}" || { _rtn=${ENO_TRACE} E="Error: '${1}' is not a valid bash script"; error-p; }
+
+    log_fd 2 ""
+    show_embedded_comments -s '^#[\-]{79}$' '^#[\-]{1}$' "${_fn}" || {
+        _rtn=$(get_status)
+        E="Error: unable to show API documentation."
+    }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function show_function_api()
+# Description: show the API docs for specified function(s) in script
+# Depends: bashlib
+# API:
+#  $1 - funcname_name_regex
+#  $2 - scriptfile
+# Inputs:
+# Outputs: API docs in 'scriptfile' matching function_name_regex
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  show_function_api coolfunc myscript
+#  show_function_api array_* myscript
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _func="${1}"
+    local _fn="$(readlink -e "${2}")"
+    is_sourceable "${_fn}" || { _rtn=${ENO_TRACE} E="Error: '${2}' is not a valid bash script"; error-p; }
+
+    log_fd 2 ""
+    show_embedded_comments "^function.*${_func}().*$" '^#-$' "${_fn}" || {
+        _rtn=$(get_status)
+        E="Error: unable to show function API documentation."
+    }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function show_profile_regex()
+# Description: show data blocks matching profile regex in script
+# Depends: bashlib
+# API:
+#  $1 - profile_filename
+#  $2 - scriptfile
+# Inputs:
+# Outputs: data blocks in 'scriptfile' that matches regexes in profile
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  show_profile_regex myprofile myscript
+#-
+{
+    local _params="${@}"
+    func-init
+
+    local _pfn="$(readlink -e "${1}")"
+    local _fn="$(readlink -e "${2}")"
+    is_readable_file "${_pfn}" || { _rtn=${ENO_TRACE} E="Error: '${1}' is not a readable profile"; error-p; }
+    is_sourceable "${_fn}" || { _rtn=${ENO_TRACE} E="Error: '${2}' is not a valid bash script"; error-p; }
+
+    log_fd 2 ""
+    show_embedded_comments $(clean_cat ${_pfn}) "${_fn}" || {
+        _rtn=$(get_status)
+        E="Error: unable to show documentation."
+    }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+# main
+
+(( $# )) || { usage -h "${0}"; E=${ENO_TRACE}; error-p; }
+
+case ${1} in
+
+    -A) show_full_api "${2}" ;;
+
+    -F) show_function_api "${2}" "${3}" ;;
+
+    -U) usage --help "$(readlink -e "${2}")" ;;
+
+    -u) usage -h "$(readlink -e "${2}")" ;;
+
+    -p) show_profile_regex "${2}" "${3}" ;;
+
+    *)
+        declare -a _cl_=( $(tokenize ' ' "${@}") )
+        readlink -e "${_cl_[-1]}" || { _rtn=${ENO_TRACE}; E="Error: file not found '${_cl_[-1]}'"; error-p; }
+        show_embedded_comments "${@}"
+        ;;
+
+esac
+
+prog-exit
