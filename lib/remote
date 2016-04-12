@@ -23,7 +23,7 @@ function find_symbol_names()
 #  0 on success
 #  1 on failure
 # Examples:
-#   find_sybmol_names -f "install_.*" "log_.*"
+#   find_sybmol_names -function "install_.*" "log_.*"
 #-
 {
     local _params="${@}"
@@ -53,13 +53,13 @@ function expand_symbol_names()
 #  $1 - <-alias|-array|-exported|-function|-hash|-integer|-readonly|-regular>
 #  $@ - list of regular expressions
 # Inputs:       list of regex
-# Outputs:      names of all matching symbols (functions, arrays, vars, etc.)
+# Outputs:      contents of all matching symbols names (functions, arrays, vars, etc.)
 # Environment:
 # Returns:
 #  0 on success
 #  1 on failure
 # Examples:
-#
+#   expand_symbol_names -hash _${iid}_object_
 #-
 {
     local _params="${@}"
