@@ -106,6 +106,9 @@ declare _self_="${0}"
 # base network
 ip_network="192.168.1."
 
+# domain name
+dns_domain=infinux.org
+
 # ssh port
 ssh_port=22022
 
@@ -126,13 +129,13 @@ dst_snddir=recordings
 
 [[ "${1}" == "-d" ]] && { shift; cleanup=1; } || :
 
-is_numeric ${1//\./} && {
+is_numeric ${1:0:1} && {
     # ip address
     ip_host="${1}"
     host=${ip_network}${ip_host}
 } || {
     # dns name
-    host="${1}"
+    host="${1//.${dns_domain}/}.${dns_domain}"
 }
 
 log "###################### beginning phone sync #####################"
