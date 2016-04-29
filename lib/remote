@@ -81,6 +81,7 @@ function expand_symbol_names()
                 ;;
             *)
                 declare -p ${_found_names[n]} | range "[[:blank:]]" 2
+                ;;
         esac
     done || _rtn=${ENO_TRACE}
 
