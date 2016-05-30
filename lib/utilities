@@ -474,8 +474,9 @@ function convert_long_options()
     local _params="${@}"
     func-init
 
-    local -a _l=( $(evar "${1}[@]") ); shift
-    local -a _s=( $(evar "${1}[@]") ); shift
+    local _a=
+    for _a in _l _s; do local -a ${_a}=( $(evar "${1}[@]") ); shift; done
+
     (( ${#_l[@]} == ${#_s[@]} )) || { echo "mismatched options arrays"; return 1; }
     local _o="${@}"
 
@@ -507,10 +508,13 @@ function get_user_input()
 # Examples:
 #  case-sensitive, single char entry usage:
 #    _uinput=$(get_user_input "[F]robulate, [T]hingy, Un[s]ee" F T s)
+#
 #  case-insensitive, single char entry usage:
 #    _mychoice="$(get_user_input "[T]his, T[h]at, [O]ther" h H t T o O)"
+#
 #  any input allowed, blank uses default:
 #    _myinput="$(get_user_input "Tell me what you're thinking" "very cool widget")"
+#
 #  anything but blank input allowed:
 #    _myinput="$(get_user_input "Tell me what you're thinking")"
 #-
@@ -605,8 +609,8 @@ function get_options()
     # Create a hash to keep any options entered out-of-order on the
     # command line in ${_opt_str_} order.  This is a handy feature
     # which can be exploited to simplify options parsing and error
-    # handling later, by using an array mask method to quickly test
-    # what option combinations are valid.
+    # handling later, by using an array mask to quickly test what
+    # option combinations are valid.
     # See array_mask() for more info.
     local -A _${_cmd_}_opt_hash
     readhash _${_cmd_}_opt_hash < <(gen_opt_str_hash_kv "${_opt_str_}")
@@ -619,7 +623,7 @@ function get_options()
     local -a _${_cmd_}_opts
     readarray _${_cmd_}_opts < <(array_init $(evar "#_${_cmd_}_opt_hash[@]") ${_empty})
 
-    # Ignore getopts error noise, and init local getopts options index
+    # Ignore any getopts warnings, and init local getopts options index
     local -i OPTERR=0 OPTIND=0
 
     # active option character
@@ -859,7 +863,7 @@ function show_embedded_comments()
                 stop)
                     [[ "${_prev_state}" == "start" ]] || continue
                     [[ "${_skip_markers}" ]] || echo "${line##\#}"
-                    [[ "${BASHDOC_SEPARATOR}" ]] && echo -e "\\n${BASHDOC_SEPARATOR}\\n" || :
+                    [[ "${OUTPUT_SEPARATOR}" ]] && echo -e "\\n${OUTPUT_SEPARATOR}\\n" || :
                     _state=stopped
                     _prev_state=started
                     ;;
@@ -910,13 +914,20 @@ function get_file_attributes()
 # Returns:
 #  0 on success
 #  1 on failure
-# Examples:
-#  declare -a _attributes_=() # <-define array in required scope before calling function
-#  get_file_attributes ~/.emacs _attributes_
-#  echo "${_attributes_[@]}"
-#  exists regular symlink read notzerosize write egid modified euid _attributes_filetype
-#  echo "$(elvar "_attributes_[-1]")" # -1 is always the last element of an array
-#  Lisp/Scheme program, ASCII text
+# Example:
+#  Step 1.
+#   declare -a _attributes_=() # <-define array in required scope before
+#                              #   calling get_file_attributes() function
+#  Step 2.
+#   get_file_attributes ~/.emacs _attributes_
+#
+#  Step 3. Access the attributes:
+#   echo "${_attributes_[@]}"
+#   exists regular symlink read notzerosize write egid modified euid _attributes_filetype
+#
+#  Step 4. Access the filetype:
+#   echo "$(elvar "_attributes_[-1]")" # <- '-1' is always the last element of an array
+#   Lisp/Scheme program, ASCII text
 #-
 {
     local _params="${@}"
@@ -1029,8 +1040,9 @@ function get_file_attributes()
         # to the caller, otherwise it will be global in scope.
         eval "${_arrayname_}_filetype="\'$(file -b -n -L -p -r -e cdf -e elf  ${_file_})\'""
 
-        # Here we add a pointer to the result of file as a varname to the
-        # last element of the array.
+        # Here we append the name of the var containing the result of
+        # the 'file' command as the last element of the attributes
+        # array.
         array_append ${_arrayname_} < <(echo "${_arrayname_}_filetype")
     }
 
