@@ -127,8 +127,10 @@ show_help "${@}"
 
 declare _self_="${0}"
 
-# separates API chunks in output
-declare BASHDOC_SEPARATOR="================================================================================"
+# separates API chunks in output if set
+# global var used by utilities::show_embedded_comments()
+declare OUTPUT_SEPARATOR="$(log_repeat "=" 80)"
+
 
 ################################################################################
 #               P  R  O  G  R  A  M     B  E  G  I  N  S                       #
