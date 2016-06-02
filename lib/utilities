@@ -601,8 +601,7 @@ function get_options()
     shift 4
 
     # Convert every option entered on command line to short option
-    # format.  Long and short arrays are passed by reference. These
-    # array names were passed into get_options.
+    # format.  Long and short option arrays are passed in by reference.
     local -a _${_cmd_}_cmdline
     readarray _${_cmd_}_cmdline < <(convert_long_options "${_long_}" "${_short_}" "${@}")
 
