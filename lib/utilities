@@ -475,7 +475,7 @@ function convert_long_options()
     func-init
 
     local _a=
-    for _a in _l _s; do local -a ${_a}=( $(evar "${1}[@]") ); shift; done
+    for _a in _l _s; do local -a ${_a}; eval "${_a}=( $(evar "${1}[@]") )"; shift; done
 
     (( ${#_l[@]} == ${#_s[@]} )) || { echo "mismatched options arrays"; return 1; }
     local _o="${@}"
