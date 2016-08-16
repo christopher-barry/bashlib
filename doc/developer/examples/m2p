@@ -162,7 +162,7 @@ function search_music()
 
     local type=${1} regex="${2}"
 
-    array_append mlist < <(find . -type ${type} -print | grep ${regex}) || {
+    array_append mlist < <(find . -type ${type} -print | grep "${regex}") || {
         _rtn=$(get_status)
         E="Gathering music list failed"
         error-f
@@ -189,8 +189,9 @@ log_fd 2 ""
 read -p "Continue? [y/N] " key
 [[ "${key^}" == "Y" ]] || { log "copy aborted"; error-p; }
 
-try --eval rsync --stats --progress -crRe \'ssh -p ${ssh_port}\' "${mlist[@]// /\ }" ${host}:${dst_basedir}/${dst_musicdir} 2>&1 || {
-    _rtn=$(get_status)
+rsync --stats --progress -crRe "ssh -p ${ssh_port}" "${mlist[@]// /\ }" "${host}:${dst_basedir}/${dst_musicdir}" 2>&1 | log
+rtn=$(get_status)
+(( rtn )) && {
     E="Error transferring data"
     error-p
 }
