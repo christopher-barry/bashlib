@@ -14,10 +14,10 @@
 #   psync [-v|-D] [-d] <hostname|last-ip-quad>
 #
 # DESCRIPTION
-#   rsync all image, recordings, and video data to desktop and delete
-#   from phone. Does not sync music. See m2p for music a related
-#   transfer script. Use -v as first parameter to see output on
-#   screen. All output is always logged to ~/log/psync.log.
+#   rsync all image, recordings, and video data to desktop and
+#   optionally delete from phone. Does not sync music. See m2p for
+#   music a related transfer script. Use -v as first parameter to see
+#   output on screen. All output is always logged to ~/log/psync.log.
 #
 # FEATURES
 #   You'll need an ssh server running on your phone, and have your
