@@ -4,13 +4,11 @@ function test_get_options()
 # Description: exercise the get_options function
 # Depends: bashlib,
 # API:
-#  $1 -
-#  $2 -
-#  $3 -
-#  $4 -
-#  $5 -
-#  $@ -
-#  $* -
+#  $1 - executable_name
+#  $2 - long_opt_array_name
+#  $3 - short_opt_array_name
+#  $4 - getopts_option_string
+#  $@ - $1's commandline
 # Inputs:
 # Outputs:
 # Environment:
@@ -24,8 +22,26 @@ function test_get_options()
     local _params="${@}"
     func-init
 
-    # function body
+    local -a _longopts _shortopts
+    _longopts=(  --get-data --prototype --process-all )
+    _shortopts=(  -g         -p                  -a   )
+
+    get_options test_get_options_cmd _longopts _shortopts "gp:a" "-p myproto" -a -g 'this is my additional commandline'
+
 
     func-return
 }
 ##------------------------------------------------------------------------------
+
+function test_get_options_cmd()
+# be a simple command for get_options to run
+{
+    local _params="${@}"
+    minimal-func-init
+
+    echo "My Options: "$(evar ${1}[@]) ; shift
+    echo "My Mask: "$(evar ${1}[@])    ; shift
+    echo "My cmdline: "$(evar ${1}[@]) ; shift
+
+    minimal-func-return
+}
