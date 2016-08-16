@@ -618,7 +618,7 @@ function get_options()
     # size it to contain all possible option args, and initialize all
     # elements to the generated unique value '${_empty}', defaulting to
     # global var ${EMPTY_ARG} if set.
-    local _empty=${EMPTY_ARG:-$(gen_jiffies)}
+    local _empty=${EMPTY_ARG:-$(gen_iid)}
     local -a _${_cmd_}_opts
     readarray _${_cmd_}_opts < <(array_init $(evar "#_${_cmd_}_opt_hash[@]") ${_empty})
 
@@ -761,7 +761,9 @@ function usage()
 
             *)
                 _opts_done=1
-                _scriptfile=${1}
+                _scriptfile="$(readlink -e ${1})"
+                is_exist_file ${_scriptfile} || { E="Error: ${_scriptfile} not found"; _rtn=${ENO_TRACE}; error-p; }
+                is_sourceable ${_scriptfile} || { E="Error: ${_scriptfile} not a valid shell script"; _rtn=${ENO_TRACE}; error-p; }
                 ;;
         esac
     done

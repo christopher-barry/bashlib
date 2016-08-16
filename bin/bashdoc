@@ -255,9 +255,27 @@ case ${1} in
     -p) show_profile_regex "${2}" "${3}" ;;
 
     *)
-        declare -a _cl_=( $(tokenize ' ' "${@}") )
-        readlink -e "${_cl_[-1]}" || { _rtn=${ENO_TRACE}; E="Error: file not found '${_cl_[-1]}'"; error-p; }
-        show_embedded_comments "${@}"
+        (( $# > 2 )) && {
+            # we're feeding it start and stop regexes
+            declare -a _cl_=( $(tokenize [:space:] "${@}") )
+            readlink -e "${_cl_[-1]}" || { _rtn=${ENO_TRACE}; E="Error: file not found '${_cl_[-1]}'"; error-p; }
+            show_embedded_comments "${@}"
+        }
+
+        (( $# == 1 )) && {
+            # no switch provided - attempt to show target file full usage
+            filename="$(readlink -e "${1}")"
+            is_exist_file "${filename}" && {
+                is_sourceable "${filename}" && {
+                    usage --help "${filename}"
+                } || {
+                    log_fd 2 "Error: ${1} is not a valid shell script."
+                }
+            } || {
+                log_fd 2 "Error: ${1} not found."
+            }
+        }
+
         ;;
 
 esac
