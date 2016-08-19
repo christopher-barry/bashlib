@@ -29,7 +29,7 @@ function find_symbol_names()
     local _params="${@}"
     func-init
 
-    local _type_="${1##*-}"; shift
+    local _type_="${1##*--}"; shift
 
     [[ "${_type_}" =~ alias|array|exported|function|hash|integer|readonly|regular ]] && {
         [[ "${BASH_ALIASES[get-env-${_type_}-names]}" ]] && {
@@ -50,7 +50,7 @@ function expand_symbol_names()
 #  simpler, automatic instantiation remotely.
 # Depends: bashlib
 # API:
-#  $1 - <-alias|-array|-exported|-function|-hash|-integer|-readonly|-regular>
+#  $1 - < --alias|--array|--exported|--function|--hash|--integer|--readonly|--regular >
 #  $@ - list of regular expressions
 # Inputs:       list of regex
 # Outputs:      contents of all matching symbols names (functions, arrays, vars, etc.)
@@ -59,7 +59,7 @@ function expand_symbol_names()
 #  0 on success
 #  1 on failure
 # Examples:
-#   expand_symbol_names -hash _${iid}_object_
+#   expand_symbol_names --hash _${iid}_object_
 #-
 {
     local _params="${@}"
@@ -73,10 +73,10 @@ function expand_symbol_names()
 
     for (( n=0; n<${#_found_names[@]}; n++ )); do
         case ${_type_} in
-            -alias)
+            --alias)
                 alias -p | grep "^alias[[:blank:]]${_found_names[n]}=.*$"
                 ;;
-            -function)
+            --function)
                 declare -f ${_found_names[n]}
                 ;;
             *)

@@ -393,7 +393,7 @@ function log_center()
         local _post=$(( _cols - ( 1 + _pre + ${#_msg_} + 1 ) ))
     }
 
-    echo -n "$(log_repeat "${_mark_}" ${_pre})${_msg_}$(log_repeat "${_mark_}" ${_post})"
+    echo -n "$(log_repeat "${_mark_}" ${_pre}) ${_msg_} $(log_repeat "${_mark_}" ${_post})"
 
     minimal-func-return
 }
@@ -474,7 +474,7 @@ function log_fd()
 {
     minimal-func-init
 
-    [[ "${1}" == -[en] ]] && { local _opt_=${1}; shift; }
+    [[ "${1}" =~ -[en] ]] && { local _opt_=${1}; shift; }
     local _fd_=${1}; shift
     local _msg_="${*}"
 
@@ -494,8 +494,8 @@ function log_debug_noise_filter()
 # Depends: bashlib, stdbuf
 # API:
 #  $* - a regular expression of patterns to remove from debug log stream
-# Inputs: 'set -x' output
-# Outputs: filtered 'set -x' output
+# Inputs: raw xtrace output
+# Outputs: regex filtered xtrace output
 # Returns:
 #  0 on success
 #  1 on failure
@@ -510,7 +510,7 @@ function log_debug_noise_filter()
     local _line=
     while read -t ${LOG_WAIT:-5} _line
     do
-        [[ ! "${_line}" =~ ${_drop_regex_} ]] && {
+        [[ "${_line}" =~ ${_drop_regex_} ]] || {
             echo "${_line}"
         }
     done < <(stdbuf -i0 -o0 -e0 cat -)
@@ -525,7 +525,7 @@ function log_debug_init()
 # Depends:
 # API:
 #  n/a
-# Inputs:  environment settings initially from this file
+# Inputs:  environment settings initially from base.cfg
 # Outputs: debug log
 # Returns:
 #  0 on success
@@ -543,11 +543,14 @@ function log_debug_init()
     [[ ${DEBUG_FN} ]] || DEBUG_FN="${LOG_DIR:-${HOME}/log}/$(basename ${SOURCE[0]:-${0}}).debug"
     mkdir -p $(dirname ${DEBUG_FN}) || { log_fd 2 "ERROR: cannot write debug log data to: ${DEBUG_FN}"; exit 1; }
 
+    # resolve regex array into a filter string
+    local _filter_regexes="$(gen_regex_string "${DEBUG_DROP_LINES[@]}")"
+
     # put debug log file on fd4.
     exec 4>${DEBUG_FN}
 
     # create setx filtering co-process with it's standard output redirected to the debug log.
-    coproc log_debug_noise_filter "${DEBUG_DROP_LINES}" 1>&4
+    coproc log_debug_noise_filter "${_filter_regexes}" 1>&4
 
     # close fd4 as coproc stdout (it's redirecting to a file now).
     exec 4>&-
@@ -571,8 +574,15 @@ function log_debug_init()
         PS4='+[${LINENO}]:${FUNCNAME:+${FUNCNAME}(): }'
     }
 
-    # use log_fd to write to a specific file descriptor
+    # log_fd writes to a specific file descriptor ('4' in this case)
     log_fd 4 "$(log_banner centered "$(date +'%b %d %T') Debugging: ${0}")"
+
+    log_fd 4 "$(log_center \# ${LB_COLS:-80} "Debugging is OFF for functions set in DEBUG_EXCLUDES[@]")"
+    log_fd 4 "$(log_center \# ${LB_COLS:-80} "Add/remove names from DEBUG_EXCLUDES[@] in base.cfg to modify")"
+
+    log_fd 4 "$(log_center \# ${LB_COLS:-80} "Debug output is SILENCED for regexes set in DEBUG_DROP_LINES[@]")"
+    log_fd 4 "$(log_center \# ${LB_COLS:-80} "Add/remove regexes from DEBUG_DROP_LINES[@] in base.cfg to modify")"
+    log_fd 4 " "
 
     # Uncomment these to dump tons more stuff. I didn't
     # find the extra data all that helpful, but YMMV.
@@ -601,7 +611,7 @@ function log_debug_section_header()
 #-
 {
     (( $1 > 0 )) && local _way="Exiting" || local _way="Entering"
-    log_fd ${BASH_XTRACEFD} "$(log_banner centered "$(date +'%b %d %s.%N') ${_way} function: ${FUNCNAME[${2}]}${iid:+"[${iid}]"}")"
+    log_fd ${BASH_XTRACEFD} "$(log_banner centered "$(date +'%b %d %s.%N') ${_way} '${FUNCNAME[${2}]}${iid:+"[${iid}]"}()' function body")"
 }
 ##------------------------------------------------------------------------------
 
@@ -612,7 +622,7 @@ function log_debug_control()
 # API:
 #  n/a
 # Inputs: ${DEBUG_EXCLUDES[@]} array of function names
-# Outputs: enables / disabled output to debug log
+# Outputs: enables / disables output to debug log
 # Returns:
 #  0 on success
 #  1 on failure

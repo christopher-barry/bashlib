@@ -89,7 +89,7 @@ function elvar()
     minimal-func-init
 
     [[ ${#} -gt 0 ]] && [[ "${1}" =~ ^[_[:alnum:]]+\[([\-]{1}|)[[:digit:]]+\]$ ]] || return 1
-    evar "$(evar "${1}")"
+    evar '!'"${1}"
 
     minimal-func-return
 }
@@ -320,8 +320,8 @@ function clean_cat()
 # Description: cats config-like files with comments and blank lines removed
 # Depends: bashlib
 # API:
-#  $1 - input_file
-#  $2 - any additional regexes to strip
+#  $1   - input_file
+#  [$2] - any additional regexes to strip
 # Inputs:
 # Outputs:
 # Environment:
@@ -336,13 +336,41 @@ function clean_cat()
     minimal-func-init
 
     local _fn="${1}"; shift
-    local _regex="^$(echo "#.*" "[[:blank:]]*" "${@}" | sed 's/ /$|^/g')$"
+    local _regex="$(gen_regex_string "#.*" "[[:blank:]]*" "${@}")"
+
     is_readable_file ${_fn} || { _rtn=1; error-f; }
     egrep -v "${_regex}" "${_fn}"
 
     minimal-func-return
 }
 ##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function gen_regex_string()
+# Description: convert all param words into an 'or-type' regex string
+# Depends: bashlib,
+# API:
+#  $@ - individual regexes
+# Inputs:
+# Outputs: or-type regex string
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  gen_regex_string "one" two" "three"
+#    '^one$|^two$|^three$'
+#-
+{
+#    local _params="${@}"
+#    minimal-func-init
+
+    echo "^$(echo "${*}" | sed 's/ /$|^/g')$"
+
+#    minimal-func-return
+}
+##------------------------------------------------------------------------------
+
 
 #-------------------------------------------------------------------------------
 function tokenize()
@@ -1325,6 +1353,43 @@ function array_prepend()
     local _arrayname_=${1}
     readarray ${_arrayname_} < <(get_stdin; evar "${_arrayname_}[@]")
     _rtn=$(get_status)
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function array_printc()
+# Description: print the contents of an array in n columns
+# Depends: bashlib,
+# API:
+#  $1 - number of columns (defaults to 1)
+#  $2 - array name
+# Inputs:
+# Outputs: columnar formatted output
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  array_printc 5 myarray
+#-
+{
+    local _params="${@}"
+    func-init
+
+    (( $# < 2 )) && local cols=1 || { cols=${1}; shift; }
+    local array_name=${1}
+    local -i c=
+
+    while read element; do
+        (( c < cols )) && {
+            (( c++ ))
+            echo -en "${element}\\t"
+        } || {
+            c= ; echo
+        }
+    done < <(echo -e "$(evar "${array_name}[@]/%/\n")")
 
     func-return
 }
