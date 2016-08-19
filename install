@@ -202,15 +202,14 @@ function install_verify_prefix()
 # API:
 #  [$1] [--prefix=/some/dir]
 # Inputs:
-#  --prefix=/blah, pre-set ${PREFIX} env var, or none for default
-#  install prefix of ~/bin
+#  --prefix=/blah, pre-set ${PREFIX} env var, or none for ~/bin (default)
 # Outputs: verified ${PREFIX} path
 # Environment: [$PREFIX]
 # Returns:
 #  0 on success
 #  exits on failure
 # Examples:
-#  PREFIX="$(install_verify_prefix)" || { _rtn=1; error-f; }
+#  PREFIX="$(install_verify_prefix "${1}")" || { _rtn=1; error-f; }
 #-
 {
     local _params="${@}"
@@ -221,7 +220,7 @@ function install_verify_prefix()
         [[ "${1}" =~ --prefix=(.*) ]] && {
             declare -g PREFIX="$(readlink -m ${BASH_REMATCH[1]})"
         }
-    }
+    } || :
 
     # determine base directory
     [[ "${PREFIX}" ]] && {
@@ -623,7 +622,7 @@ function install_generate_filehashes()
 
     > ${_checksums}
 
-    local _fn
+    local _fn=
     for _fn in $(<${_prefix}/bashlib/MANIFEST); do
         try --eval "sha256sum ${_fn} >> ${_checksums}" || { _rtn=1; error-f; }
     done
