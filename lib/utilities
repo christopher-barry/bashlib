@@ -362,12 +362,7 @@ function gen_regex_string()
 #    '^one$|^two$|^three$'
 #-
 {
-#    local _params="${@}"
-#    minimal-func-init
-
     echo "^$(echo "${*}" | sed 's/ /$|^/g')$"
-
-#    minimal-func-return
 }
 ##------------------------------------------------------------------------------
 
