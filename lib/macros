@@ -16,7 +16,7 @@
 # exist and execute in their containing function's scope, and don't
 # define a new, nested scope of their own, yet you can nest them for
 # reusability and structure, and still maintain a flat scope!  Sure,
-# thay can't accept parameters, but they can embed variable names that
+# they can't accept parameters, but they can embed variable names that
 # can actually reflect a local variable in the function they are
 # executing in. They're nifty, useful, and I really like 'em.
 

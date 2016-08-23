@@ -14,7 +14,7 @@ function find_symbol_names()
 #  search for symbol names in the environment using regular expressions.
 # Depends: bashlib
 # API:
-#  $1 - <-alias|-array|-exported|-function|-hash|-integer|-readonly|-regular>
+#  $1 - < --alias|--array|--exported|--function|--hash|--integer|--readonly|--regular >
 #  $@ - list of regular expressions
 # Inputs:       list of regex
 # Outputs:      names of all matching symbols (functions, arrays, vars, etc.)
@@ -23,7 +23,7 @@ function find_symbol_names()
 #  0 on success
 #  1 on failure
 # Examples:
-#   find_sybmol_names -function "install_.*" "log_.*"
+#   find_sybmol_names --function "install_.*" "log_.*"
 #-
 {
     local _params="${@}"
