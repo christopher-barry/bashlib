@@ -1,0 +1,32 @@
+# -*- mode: sh; -*-
+#-------------------------------------------------------------------------------
+function template_value_func()
+# Description: used for simple functions that need to return specific values
+# Depends: bashlib
+# API:
+#  $1 -
+#  $2 -
+#  $3 -
+#  $4 -
+#  $5 -
+#  $@ -
+#  $* -
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+#  N caller specific
+# Examples:
+#
+#-
+{
+    local _params_="${@}"
+    value-func-init
+
+    # value-returning function body
+
+    value-func-return
+}
+##------------------------------------------------------------------------------
