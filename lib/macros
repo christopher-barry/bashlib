@@ -159,7 +159,7 @@ alias func-return='error-f'
 #---[ m i n i m a l   f u n c t i o n ]---------------------------------
 
 # special case init header for simple functions
-alias minimal-func-init='debug-get-state-func; log_debug_control; func-info'
+alias minimal-func-init='debug-get-state-func; this-info'
 
 # special case return footer for simple functions
 alias minimal-func-return='debug-set-state-func'
