@@ -130,7 +130,7 @@ EOF
 #-------------------------------------------------------------------------------
 function n_monkies()
 # Description: run multiple monkey processes simulataneously
-# Depends: bashlib, parallel
+# Depends: bashlib, parallel, env_parallel, nproc, readlink
 # API:
 #  $1 - input file(s)
 #  $2 - output format
@@ -138,6 +138,8 @@ function n_monkies()
 # Inputs:
 # Outputs:
 # Environment:
+#  MONKEY_P=<number of parallel processes per iteration:{numcores}>
+#  MONKEY_N=<number of parallel invocations:{100}>
 # Returns:
 #  0 on success
 #  1 on failure
@@ -149,10 +151,16 @@ function n_monkies()
     func-init
     trap '{ echo "Completing active jobs and winding down ${FUNCNAME}..."; killall -TERM parallel; }' INT
 
+    [[ ${MONKEY_P} ]] || echo "MONKEY_P env var is unset. Using default of '$(nproc)' parallel processes..."
+    [[ ${MONKEY_N} ]] || echo "MONKEY_N env var is unset. Using default of '$(( $(nproc) * 10 ))' parallel tasks..."
+
+    local _monkey_p=${MONKEY_P:-$(nproc)}
+    local _monkey_n=${MONKEY_N:-$(( $(nproc) * 10 ))}
+
     local _input_file_=
     _input_file_=$(readlink -e "${1}") || { _rtn=${ENO_TRACE} E="${FUNCNAME}: file not found '${1}'"; error-p; }
 
-    seq 100 | parallel -j7 functest -i ~/bin/roto-monkey run_random_rotoscope ${_input_file_} svg
+    seq ${_monkey_n} | env_parallel -j${_monkey_p} functest -i ~/bin/roto-monkey run_random_rotoscope ${_input_file_} svg
 
     echo "parallel PID: $$"
 
@@ -163,9 +171,8 @@ function n_monkies()
 
 #-------------------------------------------------------------------------------
 function run_random_rotoscope()
-# Description: run rotoscope with randomly generated params against a
-#              single image.
-# Depends: bashlib, autotrace
+# Description: run rotoscope on a single image with randomly generated params
+# Depends: bashlib, autotrace, readlink
 # API:
 #  $1 - input file
 #  $2 - output filetype {svg}
@@ -184,6 +191,7 @@ function run_random_rotoscope()
 
     local _input_file_=
     _input_file_=$(readlink -e ${1}) || { _rtn=${ENO_TRACE} E="${FUNCNAME}: file not found '${1}'"; error-p; }
+
     local _output_format_=${2:-svg}
     local _run_number=${3}
     local _uuid=$(gen_uuid)
@@ -203,7 +211,7 @@ function set_random_rotoscope_opts()
 # API:
 #  [$1] - output format [eps|{svg}|dxf|pdf]
 # Inputs:   optional output format
-# Outputs:  updates a global a random options string array
+# Outputs:  updates a global random options string array
 # Environment:
 # Returns:
 #  0 on success
@@ -215,12 +223,11 @@ function set_random_rotoscope_opts()
     local _params="${@}"
     func-init
 
-    local -a _rotoscope_opts=()
-    local _fn=$(gen_tempfile)
+    local -a _rotoscope_optlist=()
 
     # 'man autotrace' for full descriptions.
     # randomly set each option
-    _rotoscope_opts=(
+    _rotoscope_optlist=(
         #-output-format filetype
         #"-output-format ${_output_format_:=svg} "
         #-background-color hexvalue_color {none}
@@ -256,23 +263,31 @@ function set_random_rotoscope_opts()
         "-report-progress "
         #-tangent-surround int {3}
         "-tangent-surround $(gen_random_int 10) "
-        #-width-factor real {none} <- option in manpage, but throws error if set
-        #"-width-factor $(gen_random_float 1 2) "
+        # -width-factor real {none}               <----_option is in manpage, but threw an error when I set it.
+        #"-width-factor $(gen_random_float 1 2) " <---'
     )
 
-    # init tempfile with output format
-    > "${_fn}"
-    # randomly select 'n' options
+    local _random_opts=""
+    local _optnum=${#_rotoscope_optlist[@]}
+    local -a _seen=( $(array_init $(( _optnum *2 )) 0) ) # avoid duplicates
     local -i c= _max=
-    until (( ${c} > ${#_rotoscope_opts[@]} )) || (( _max > (${#_rotoscope_opts[@]} * 2) )); do
-        c=$(gen_random_int $(( ${#_rotoscope_opts[@]} + $(gen_random_int 5) )) )
-        echo "${_rotoscope_opts[c]}" >> "${_fn}"
-        ((_max++))
+
+    # select random options and use random values in them to create a
+    # unique set of options for this invocation
+    until (( c > _optnum )) || (( _max > ( _optnum * 2 ) ))
+    do
+        c=$(gen_random_int $(( _optnum + $(gen_random_int 5) )) )
+
+        (( ${_seen[c]} )) || {
+            _seen[${c}]=1
+            _random_opts+="${_rotoscope_optlist[c]} "
+        }
+
+        (( _max++ ))
     done
 
-    # output unique option set
-    sort -u "${_fn}"
-    rm -f "${_fn}"
+    # output random option set
+    echo "${_random_opts}"
 
     func-return
 }
@@ -283,13 +298,11 @@ function rotoscope()
 # Description:
 # Depends: bashlib, autotrace
 # API:
-#  $1 -
-#  $2 -
-#  $3 -
-#  $4 -
-#  $5 -
-#  $@ -
-#  $* -
+#  $1 - input file
+#  $2 - output format
+#  $3 - output file
+#  $4 - [/optional/path/to/save/this/config]
+#  $@ - all autotrace options
 # Inputs:
 # Outputs:
 # Environment:
@@ -305,9 +318,10 @@ function rotoscope()
 
     local _input_file_=
     _input_file_=$(readlink -e ${1}) || { _rtn=${ENO_TRACE} E="${FUNCNAME}: file not found '${1}'"; error-p; }
+
     local _output_format_=${2}
     local _output_file_=${3}
-    # if cfg param is on
+    # if we're saving config, ${4} is a filename
     [[ "${4:0:1}" != "-" ]] && {
         local _cfg_file_=${4}
         touch ${_cfg_file_}
@@ -316,20 +330,21 @@ function rotoscope()
         shift 3
     }
 
+    # if saving config
     [[ -e ${_cfg_file_} ]] && {
-        echo "
--output-format ${_output_format_}
--output-file ${_output_file_}
-${@}
-${_input_file_}
-" >> "${_cfg_file_}"
+        cat <<EOF  >> "${_cfg_file_}"
+-output-format "${_output_format_}"
+-output-file "${_output_file_}"
+"${@}"
+"${_input_file_}"
+EOF
     }
 
     log_fd 2 "${FUNCNAME}: -output-format ${_output_format_} -output-file ${_output_file_} ${@} ${_input_file_}"
 
     autotrace -output-format ${_output_format_} \
               -output-file ${_output_file_} \
-              "${@}" \
+              ${@} \
               ${_input_file_}
 
 
