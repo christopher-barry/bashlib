@@ -8,62 +8,163 @@
 #       D  A  T  A     S  T  R  U  C  T  U  R  E     L  I  B  R  A  R  Y       #
 ################################################################################
 
+# um, yeah, so none of this does anything yet. stop back later. possibly much.
+
 #-------------------------------------------------------------------------------
-function struct()
-# Description: creates a structured data record
+function typedef()
+# Description: creates/deletes a structured data record type definition
 # Depends: bashlib,
 # API:
-#  $1 - type name
-#  $2 - assigned name
+# switches: <-C|--create type_name> <record_type:record_name[:validator_funcname]> ...
+#           <-D|--delete type_name>
+#     $1 - type name
+#     $@ - record <type>:<name>[:validator] list, where: (in create mode only)
+#         <type> is one of:
+#            'A' for associative_array
+#            'a' for indexed_array
+#            'b' for boolean
+#            'f' for float number
+#            'h' for hex number
+#            'i' for integer number
+#            's' for string
+#     and <name> is an [[:word:]]+ name for the record.
+#     if [:validator] is present, making the parameter a colon
+#     separated triplet, then 'validator' is the name of an existing
+#     function that will be used to validate the information when it
+#     is assigned to 'name' with the:
+#         'rec <recname> set <-[isb]> <name> <value>' or
+#         'rec <recname> set <-[aA]> <name> <<index|+>|key> <value>'
+#     command. 'validator' must take <name> as it's only parameter and
+#     return true or false.
 # Inputs:
 # Outputs:
 # Environment:
+#  BASHLIB_STRUCT_BASE == the base directory for struct data and template storage
 # Returns:
 #  0 on success
 #  1 on failure
 # Examples:
-#  # define the structure:
-#  struct  my_record i:my_int a:my_array h:my_hash s:my_string
-#    # this creates a function body template, saving it to /dev/shm
-#  # assign the structure to a function
-#  struct my_record rec
-#    # this creates a function named rec, with the body template embedded.
-#  # set values in the structure
-#  rec my_hash[hash_key]=hash_value my_int=100
-#  # get values from the structure
-#  rec my_hash[hash_key] my_int my_array[4]
+#  define a type of structure:
+#   typedef --create hotel_room i:rmnum:valid_rmnum \
+#               s:telnum:valid_telnum a:bednum:valid_bednum \
+#               A:beds:valid_beds b:occupied A:occupant:valid_occupant
+#  this creates a struct 'template', saving it to:
+#    ${_rundir_}/${_struct_typedir_}/${1}
+#    or, in plain English, something like:
+#    /run/user/$USER/my_script_name/26674360-fbdb-4f2f-83cd-73779a67c4b0/struct/type/hotel_room
+#    putting the data in the tmpfs filesystem for better performance.
+#
+#  the 'new()' function, defined elsewhere in this file, creates
+#  instances of data structures defined with 'struct()'.
+#
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
-    # we're defining a structure type
-    [[ "${_params}" =~ ^[[:alnum:]+][[:blank:]][ahis]:[[:alnum:]+].*$ ]] && {
-        :
-        # format a function body definition
-        # write to /dev/shm/bashlib/${0##*/}/[${instid}]/${1}
-    }
+    local -a _lo=( --create --delete )
+    local -a _so=( -C -D )
+    local -a _the_opts=$( $(convert_long_options _lo _so "${_params_}") )
 
-    # we're creating a structure instance
-    [[ "${_params}" =~ ^[[:alnum:]+][[:blank:]][[:alnum:]+]$ ]] && {
-        :
-        # verify the struct type $1 exists.
-        # initialize a new instance of it.
-        # generate a function named $2 whose data is stored in the new
-        # instance of the structure.
-    }
+    while getopts :CD OPT "${_the_opts[@]}"; do
+        case $OPT in
+            C) ACTION=create ;;
+            D) ACTION=delete ;;
+        esac
+    done
+    shift $(( OPTIND - 1 ))
+    OPTIND=1
+
+    local _struct_name_=${1}; shift
+    is_word ${_struct_name_} || { _rtn=1 E="bad struct name '${_struct_name_}', may only contain letter, number and '_' characters"; error-f; }
+    local _struct_dir=${_rundir_}/${STRUCT_TYPEDIR}/${_struct_name_}
+
+    case ${ACTION} in
+
+        create)
+            # create the struct location
+            is_exist_dir ${_struct_dir} && { _rtn=1 E="struct '${_struct_name_}' already exists."; error-f; }
+            mkdir -p ${_struct_dir}
+            echo ${_struct_name_} >${_struct_dir}/.struct_type
+
+            # create the struct layout
+            (
+                cd ${_struct_dir}
+                local p=
+                for p in "${@}"; do
+                    # create a temporary array of ('type' 'name' 'validator') from each record spec parameter
+                    local -a _tnv=()
+                    readarry _tnv <(echo -en "${p//:/\\n}")
+                    (( ${#_tnv[@]} > 1 )) && (( ${#_tnv[@]} < 4 )) || { _rtn=1 E="invalid record defnition: '${p}'"; error-f; }
+                    is_word ${_tnv[1]} || { _rtn=1 E="bad record name '${_tnv[1]}', may only contain letter, number and '_' characters"; error-f; }
+                    is_exist_dir ${_tnv[1]} && { _rtn=1 E="record '${_tnv[1]}' already exists."; error-f; }
+                    mkdir -p ${_struct_dir}/${_tnv[1]}
+                    (
+                        cd ${_tnv[1]}
+                        echo "${_tnv[1]}" >${_tnv[1]}_name
+
+                        case ${_tnv[0]} in
+                            A)
+                                echo "associative_array" >${_tnv[1]}_type
+                                echo "is_hash" >${_tnv[1]}_validator
+                                ;;
+                            a)
+                                echo "indexed_array" >${_tnv[1]}_type
+                                echo "is_array" >${_tnv[1]}_validator
+                                ;;
+                            b)
+                                echo "bool" >${_tnv[1]}_type
+                                echo "is_bool" >${_tnv[1]}_validator
+                                ;;
+                            f)
+                                echo "float" >${_tnv[1]}_type
+                                echo "is_float" >${_tnv[1]}_validator
+                                ;;
+                            h)
+                                echo "hex" >${_tnv[1]}_type
+                                echo "is_hex" >${_tnv[1]}_validator
+                                ;;
+                            i)
+                                echo "integer" >${_tnv[1]}_type
+                                echo "is_decimal" >${_tnv[1]}_validator
+                                ;;
+                            s)
+                                echo "string" >${_tnv[1]}_type
+                                echo "is_string" >${_tnv[1]}_validator
+                                ;;
+                            *)
+                                _rtn=1 E="invalid type specification '${_tnv[0]}'"
+                                error-f
+                                ;;
+                        esac
+
+                        # if an optional custom validator function is assigned, add it to standard validator
+                        (( ${#_tnv[@]} == 3 )) && {
+                            is_function ${_tnv[2]} || { _rtn=1 E="validator function '${_tnv[2]}' is not defined."; error-f; }
+                            echo "${_tnv[2]}" >>${_tnv[1]}_validator
+                        } || :
+                    )
+                done
+            )
+            ;;
+
+        delete)
+            [[ -d ${_struct_dir} ]] && rm -rf ${_struct_dir}
+            ;;
+    esac
 
     func-return
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
-function _defun()
-# Description: creates struct functions with persistent memoryfs storage
+function new()
+# Description: instantiates a new instance of an object
 # Depends: bashlib,
 # API:
-#  $1 - function name
-#  $2 - file containing function body
+#  $1   - object type
+#  $2   - object type_name
+#  $3   - instance name
 # Inputs:
 # Outputs:
 # Environment:
@@ -71,13 +172,36 @@ function _defun()
 #  0 on success
 #  1 on failure
 # Examples:
-#  _defun my_new_func /dev/shm/bashlib/${0##*/}/${instid}/my_struct
+#  new struct my_struct_type my_struct_name
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
-    # function body
+    local _obj_=${1}
+    local _type_=${2}
+    local _name_=${3}
+
+    case ${_obj_} in
+
+        struct)
+            local _struct_dir=${_rundir_}/${STRUCT_TYPEDIR}
+            local _data_dir=${_rundir_}/${STRUCT_DATADIR}
+
+            is_exist_dir ${_struct_dir}/${_type_} || { _rtn=1 E="struct typedef '${_type_}' does not exist."; error-f; }
+            is_exist_dir ${_data_dir}/${_name_} && { _rtn=1 E="struct instance '${_name_}' already exists."; error-f; }
+
+            (
+                cd ${_struct_dir}
+                local tmpname=${RANDOM}-${RANDOM}-${RANDOM}
+                cp -r ${_type_} ${_data_dir}/${tmpname}
+                mv ${_data_dir}/${tmpname} ${_data_dir}/${_name_}
+            )
+            ;;
+        *)
+            _rtn=1 E="unknown object type"; error-f
+            ;;
+    esac
 
     func-return
 }
@@ -88,7 +212,8 @@ function _get()
 # Description: gets data from a struct node
 # Depends: bashlib,
 # API:
-#  $1 - node name
+#  $1 - name
+#  $@ - <regex>
 # Inputs:
 # Outputs:
 # Environment:
@@ -99,7 +224,7 @@ function _get()
 #  v=$(_get ${n})
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     # function body
@@ -109,12 +234,12 @@ function _get()
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
-function _put()
-# Description: put data into a struct node
+function _set()
+# Description: set data into a struct node
 # Depends: bashlib,
 # API:
-#  $1 - node name
-#  $@ - value
+#  $1 - name
+#  $@ - key 'value'
 # Inputs:
 # Outputs:
 # Environment:
@@ -122,63 +247,10 @@ function _put()
 #  0 on success
 #  1 on failure
 # Examples:
-#  _put ${n} ${v}
+#  _put ${n} ${k} ${v}
 #-
 {
-    local _params="${@}"
-    func-init
-
-    # function body
-
-    func-return
-}
-##------------------------------------------------------------------------------
-
-#-------------------------------------------------------------------------------
-function _typedef()
-# Description: define a structure type template
-# Depends: bashlib,
-# API:
-#  $1 - type name
-#  $@ - type parameters
-# Inputs:
-# Outputs:
-# Environment:
-# Returns:
-#  0 on success
-#  1 on failure
-# Examples:
-#  _typedef my_struct_type a:my_array h:my_hash i:my_int s:my_string
-#-
-{
-    local _params="${@}"
-    func-init
-
-    # function body
-
-    func-return
-}
-##------------------------------------------------------------------------------
-
-#-------------------------------------------------------------------------------
-function _init()
-# Description: initialize a new instance of a data structure
-# Depends: bashlib,
-# API:
-#  $1   - structure name
-#  $2   - instance name
-#  [$3] - instance id
-# Inputs:
-# Outputs:
-# Environment:
-# Returns:
-#  0 on success
-#  1 on failure
-# Examples:
-#  _init
-#-
-{
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     # function body
