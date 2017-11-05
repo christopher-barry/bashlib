@@ -11,7 +11,8 @@
 
 # When part of a single user installation, this file is located in
 # ~/.bashlibrc, and should be sourced from your ~/.bashrc with
-# something similar to the following code below: (remove first '#' from each line)
+# something similar to the following code below: (remove first '#'
+# from each line)
 
 ## initialize bashlib
 #IPATH=/where/you/installed/it/bashlib/lib
