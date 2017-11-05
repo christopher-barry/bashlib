@@ -3,7 +3,8 @@
 # Dependencies: base.cfg
 # Author: Christopher Barry
 # License: GPLv2 or later
-#
+# Depends: bashlib awk mkdir id rm
+
 ################################################################################
 #       M  A  C  R  O     F  U  N  C  T  I  O  N     L  I  B  R  A  R  Y       #
 ################################################################################
@@ -29,43 +30,175 @@
 # this option allows aliases non-interactively.
 shopt -s expand_aliases
 
+
 ## BEGIN MACRO DEFINITIONS ##
 
-#-------------- program boilerplate
+#---[ d e b u g ]-------------------------------------------------------
+
+alias debug-get-state-prog='declare _dbgstate=$(log_debug_get_state); log_debug_control'
+
+alias debug-set-state-prog='log_debug_set_state ${_dbgstate}'
+
+
+alias debug-get-state-func='local _dbgstate=$(log_debug_get_state); log_debug_control'
+
+alias debug-set-state-func='log_debug_set_state ${_dbgstate}'
+
+##----------------------------------------------------------------------
+
+
+#---[ d e f a u l t   m e s s a g e s ]---------------------------------
+
+alias prog-init-messages='declare _err="Error:" _warn="Warning:" E="${_self_}: ${_params_} failed"'
+
+alias prog-return-messages='get-return-status; E=${E:-"${_err} ${_self_}: ${_params_} failed"}'
+
+
+alias func-init-messages='local _err="Error:" _warn="Warning:" E="${FUNCNAME}: ${_params_} failed"'
+
+alias func-return-messages='get-return-status; E=${E:-"${_err} ${FUNCNAME}: ${_params_} failed"}'
+
+##----------------------------------------------------------------------
+
+
+#---[ t r a p s ]-------------------------------------------------------
+
+alias prog-trap='trap "log_error \${_rtn:-\${?}} 1 \${E}" EXIT'
+
+
+alias func-trap='trap "log_error \${_rtn:-\${?}} 1 \${E}" RETURN'
+
+##----------------------------------------------------------------------
+
+
+#---[ i n f o r m a t i o n ]-------------------------------------------
+
+alias this-name='_this_=${FUNCNAME:-${0##*/}}; _this_=${_this_//[[:punct:]]/_}'
+
+alias this-source='declare -g ${_this_^^}_DEFINED="${BASH_SOURCE:-${SCRIPT_SOURCE}}"'
+
+alias this-line-number='declare -g ${_this_^^}_LINENO="${BASH_LINENO:-1}"'
+
+alias this-invoked='declare -g ${_this_^^}_INVOKED="${BASH_SOURCE[1]:-${SCRIPT_SOURCE}}"'
+
+# define func-named vars for each invoked function
+alias this-info='this-name; this-source; this-line-number; this-invoked'
+
+##----------------------------------------------------------------------
+
+
+#---[ i n i t ]---------------------------------------------------------
+
+alias _-init-_=
+
+
+#---[ s e s s i o n ]---------------------------------------------------
+
+alias this-script-fullpath='SCRIPT_SOURCE="${0}"'
+
+alias this-script-name='_self_="${0%*/}"'
+
+# allow maintaining a known session id using WITH_SESSION, along with
+# KEEP_RUNDIR to make data structures persistent across program
+# invocations. e.g.:
+#
+#   export KEEP_RUNDIR=true WITH_SESSION=26674360-fbdb-4f2f-83cd-73779a67c4b0
+#
+# now, the data will not be deleted at program termination, and it will
+# use the specified session directory. however, the session directory
+# will go away by default at user logout or system reboot because it is
+# on a volatile memory filesystem by default.
+alias this-session='_session_=${WITH_SESSION:-$(gen_uuid)}'
+
+alias this-rundir-init='mkdir -p ${_rundir_}'
+
+# to modify _rundir_ to use a non-tmpfs filesystem path (to make any
+# stored application data persistent across reboots), set WITH_RUNDIR
+# to a non-volatile storage location. e.g.:
+#
+#   export WITH_RUNDIR=/${HOME}/data
+#
+# the location must be writable by the user running the application.
+#
+alias this-rundir='_rundir_=${WITH_RUNDIR:-/run/user}/$(id -u)/${_self_}/${_session_}; this-rundir-init'
+
+# init session for this instance
+alias session-init='this-script-fullpath; this-script-name; this-session; this-rundir'
+
+##----------------------------------------------------------------------
+
+
+#---[ p r o g r a m ]---------------------------------------------------
+
 # init header for programs
-alias prog-init='declare _dbgstate=$(log_debug_get_state) SCRIPT_SOURCE="${0}"; log_debug_control; func-info; declare E="${0##*/} ${_params} failed" _rtn=; trap "log_error \${_rtn:-\${?}} 1 \${E}" EXIT'
+alias prog-init='debug-get-state-prog; this-info; prog-init-messages; prog-trap'
 
 # composite on-error macro for programs
-alias error-p='get-return-status; E=${E:-"Error: ${0##*/}: ${_params} failed"}; log_debug_set_state ${_dbgstate}; remove_macros; exit ${_rtn}'
+alias error-p='prog-return-messages; debug-set-state-prog; remove_macros; remove_rundir; exit ${_rtn}'
 
 # exit footer for programs
 alias prog-exit='error-p'
 
-#-------------- function boilerplate
-# define func-named vars for each invoked function
-alias func-info='_this_=${FUNCNAME:-${0##*/}}; _this_=${_this_//[[:punct:]]/_}; declare -g ${_this_^^}_DEFINED="${BASH_SOURCE:-${SCRIPT_SOURCE}}"; declare -g ${_this_^^}_INVOKED="${BASH_SOURCE[1]:-${SCRIPT_SOURCE}}"; declare -g ${_this_^^}_LINENO="${BASH_LINENO:-1}"'
+##----------------------------------------------------------------------
+
+
+#---[ f u n c t i o n ]-------------------------------------------------
 
 # init header macro for functions
-alias func-init='local _dbgstate=$(log_debug_get_state); log_debug_control; func-info; local _err="Error:" _warn="Warning:" E="${FUNCNAME}: ${_params} failed" _rtn= ; trap "log_error \${_rtn:-\${?}} 1 \${E}" RETURN'
+alias func-init='debug-get-state-func; this-info; func-init-messages; func-trap'
 
 # composite on-error macro for functions
-alias error-f='get-return-status; E=${E:-"${FUNCNAME} ${_params} failed"}; get-env-local; log_debug_set_state ${_dbgstate}; return ${_rtn}'
+alias error-f='func-return-messages; get-env-local; debug-set-state-func; return ${_rtn}'
 
 # return footer macro for functions
 alias func-return='error-f'
 
-#-------------- minimal function boilerplate
-# special case init heaqder for simple functions
-alias minimal-func-init='local _dbgstate=$(log_debug_get_state); log_debug_control; func-info'
+##----------------------------------------------------------------------
+
+
+#---[ m i n i m a l   f u n c t i o n ]---------------------------------
+
+# special case init header for simple functions
+alias minimal-func-init='debug-get-state-func; log_debug_control; func-info'
 
 # special case return footer for simple functions
-alias minimal-func-return='log_debug_set_state ${_dbgstate}'
+alias minimal-func-return='debug-set-state-func'
 
-#-------------- status
+##----------------------------------------------------------------------
+
+
+#---[ v a l u e   f u n c t i o n ]-------------------------------------
+
+# special case init header for simple functions that need to return specific values
+alias value-func-init='minimal-func-init; trap "log ${FUNCNAME} ${_params_} returned \${_rtn:-\${?}}" RETURN'
+
+# special case footer for simple functions that need to return specific values
+alias value-func-return='get-return-status; minimal-func-return; return ${_rtn}'
+
+##----------------------------------------------------------------------
+
+
+#---[ c o p r o c e s s   f u n c t i o n ]-----------------------------
+
+# special case init header for coproc function: minimal, plus allows reloading an environemnt file on sighup
+alias coproc-func-init='minimal-func-init; local _source_env_fn=$(echo ${_params_} | awk -F[[:blank:]] "{ print \$2 }"); trap "signal USR1 \${_bg_loop_pid}" HUP'
+
+# special case return footer for coproc functions: minimal plus clean up temp env files
+alias coproc-func-return='[[ -f ${_source_env_fn} ]] && rm -f --preserve-root ${_source_env_fn}; minimal-func-return'
+
+##----------------------------------------------------------------------
+
+
+#---[ s t a t u s ]-----------------------------------------------------
+
 # examine the last executed pipeline for error conditions
 alias get-return-status='_rtn=$(get_status)'
 
-#-------------- environment dumping tools
+##----------------------------------------------------------------------
+
+
+#---[ e n v i r o n m e n t   d u m p i n g   t o o l s ]---------------
+
 # dump alias names defined in the environment
 alias get-env-alias-names='alias |  awk -F= "{ print \$1 }" | awk -F[[:blank:]] "{ print \$2 }"'
 
@@ -95,6 +228,7 @@ alias get-env-local='readarray _${FUNCNAME}_env < <(local|grep -v '^E=.*$')'
 
 ## END MACRO DEFINITIONS ##
 
+
 # on every load of this file, automatically create an up-to-date array
 # of all the alias names defined in this file, so they can be
 # destroyed on the way out.
@@ -123,3 +257,6 @@ begin= end= state= line=
 
 # called to cleanup from error-p, and prog-exit macro definitions
 function remove_macros() { shopt -u expand_aliases; unalias ${MACRO_NAMES[@]} &>/dev/null; }
+
+# called to remove unique temp work area
+function remove_rundir() { [[ -d ${_rundir_} ]] && { [[ ${KEEP_RUNDIR} ]] || rm --preserve-root -rf ${_rundir_}; }; }

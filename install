@@ -1,7 +1,7 @@
 #!/bin/bash
 # -*- mode: sh; -*-
 # install: install bashlib
-# Dependencies: bashlib, readlink, GNU coreutils:install,
+# Dependencies: macros logging utilities
 # Authors: Christopher Barry
 # License: GPLv2 or later
 #
@@ -184,7 +184,7 @@ case "${1}" in
 esac
 
 # initialize logging, debug, and program subsystems
-log_init; log_debug_init; _params="${@}"; prog-init
+log_init; log_debug_init; _params_="${@}"; prog-init
 
 # builtin help functionality
 show_help "${@}"
@@ -195,14 +195,11 @@ show_help "${@}"
 
 #-------------------------------------------------------------------------------
 function install_verify_prefix()
-# Description:
-#  check to make sure we can install bashlib into the desired
-#  location, creating any directories in the path as required.
-# Depends: bashlib, readlink
+# Description: check to make sure we can install into the desired location
+# Depends: bashlib readlink mkdir
 # API:
 #  [$1] [--prefix=/some/dir]
-# Inputs:
-#  --prefix=/blah, pre-set ${PREFIX} env var, or none for ~/bin (default)
+# Inputs: --prefix=/blah, pre-set ${PREFIX} env var, or none for ~/bin (default)
 # Outputs: verified ${PREFIX} path
 # Environment: [$PREFIX]
 # Returns:
@@ -212,7 +209,7 @@ function install_verify_prefix()
 #  PREFIX="$(install_verify_prefix "${1}")" || { _rtn=1; error-f; }
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     # was anything passed in?
@@ -257,7 +254,7 @@ function install_verify_prefix()
 #-------------------------------------------------------------------------------
 function install_is_system_wide()
 # Description: determine if a personal or system-wide install
-# Depends: bashlib
+# Depends: bashlib id grep
 # API:
 #  n/a
 # Inputs: euid of user, ${PREFIX}
@@ -279,9 +276,8 @@ function install_is_system_wide()
 
 #-------------------------------------------------------------------------------
 function install_files()
-# Description:
-#  install files from deployed source tree into the filesystem as required
-# Depends: bashlib
+# Description: install files from tree into the filesystem as required
+# Depends: bashlib readlink awk cat mkdir cp
 # API:
 #  $1 - prefix
 #  $2 - install target
@@ -295,7 +291,7 @@ function install_files()
 #
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _prefix="$(readlink -e "${1}")"
@@ -355,7 +351,7 @@ function install_files()
 #-------------------------------------------------------------------------------
 function install_links()
 # Description: install symlinks from install tree to correct locations
-# Depends: bashlib
+# Depends: bashlib cat awk ln
 # API:
 #  $1 - prefix
 #  $2 - install target
@@ -369,7 +365,7 @@ function install_links()
 #
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _prefix="$(readlink -e "${1}")"
@@ -437,8 +433,8 @@ function install_links()
 
 #-------------------------------------------------------------------------------
 function install_generate_manifest()
-# Description:
-# Depends: bashlib
+# Description: creates a list of all installed files
+# Depends: bashlib readlink cat awk find
 # API:
 #  $1 - prefix
 #  $2 - install_target
@@ -452,7 +448,7 @@ function install_generate_manifest()
 #
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _prefix="$(readlink -e "${1}")"
@@ -521,7 +517,7 @@ function install_generate_manifest()
 #-------------------------------------------------------------------------------
 function install_create_uninstall_link()
 # Description: create a special uninstall link
-# Depends: bashlib
+# Depends: bashlib ln
 # API:
 #  n/a
 # Inputs:
@@ -534,7 +530,7 @@ function install_create_uninstall_link()
 #
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     try ln -sf install uninstall || { _rtn=1; error-f; }
@@ -546,7 +542,7 @@ function install_create_uninstall_link()
 #-------------------------------------------------------------------------------
 function install_set_permissions()
 # Description: sets correct permissions for all files and directories
-# Depends: bashlib
+# Depends: bashlib find chmod chown id
 # API:
 #  $1 - prefix
 #  $2 - install target
@@ -560,7 +556,7 @@ function install_set_permissions()
 #
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _prefix="$(readlink -e "${1}")"
@@ -594,8 +590,8 @@ function install_set_permissions()
 
 #-------------------------------------------------------------------------------
 function install_generate_filehashes()
-# Description:
-# Depends: bashlib
+# Description: generate a sha256 checksum for each installed file
+# Depends: bashlib sha256sum
 # API:
 #  $1 - prefix
 #  $2 - install_target
@@ -609,7 +605,7 @@ function install_generate_filehashes()
 #
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _prefix="$(readlink -e "${1}")"
@@ -634,7 +630,7 @@ function install_generate_filehashes()
 #-------------------------------------------------------------------------------
 function install_update_bashrc()
 # Description: update .bashrc with code to load bashlib in single_user installs
-# Depends: bashlib,
+# Depends: bashlib readlink sed grep
 # API:
 #  $1 - prefix
 #  $2 - install_target
@@ -653,7 +649,7 @@ function install_update_bashrc()
 #
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _prefix="$(readlink -e "${1}")"
@@ -731,7 +727,7 @@ function install_update_bashrc()
 #-------------------------------------------------------------------------------
 function install_to()
 # Description: install for single user or system wide
-# Depends: bashlib
+# Depends: bashlib readlink rsync
 # API:
 #  $1 - prefix
 #  $2 - install_target
@@ -745,7 +741,7 @@ function install_to()
 #
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _prefix="${1}"
@@ -799,7 +795,7 @@ function install_to()
 #-------------------------------------------------------------------------------
 function install_execute()
 # Description: runs the actual installation
-# Depends: bashlib
+# Depends: bashlib id
 # API:
 #  $1 - [prefix]
 # Inputs:
@@ -812,7 +808,7 @@ function install_execute()
 #
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _PREFIX="${1}"
@@ -844,7 +840,7 @@ function install_execute()
 #-------------------------------------------------------------------------------
 function uninstall_from()
 # Description: uninstall from single user or system wide
-# Depends: bashlib
+# Depends: bashlib readlink
 # API:
 #  $1 - prefix
 #  $2 - install target
@@ -858,7 +854,7 @@ function uninstall_from()
 #
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _prefix="$(readlink -e "${1}")"
@@ -873,7 +869,7 @@ function uninstall_from()
 #-------------------------------------------------------------------------------
 function uninstall_execute()
 # Description: runs the uninstallation functions
-# Depends: bashlib
+# Depends: bashlib readlink id
 # API:
 # Inputs:
 # Outputs:
@@ -885,7 +881,7 @@ function uninstall_execute()
 #
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     (

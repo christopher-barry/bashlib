@@ -10,9 +10,8 @@
 
 #-------------------------------------------------------------------------------
 function find_symbol_names()
-# Description:
-#  search for symbol names in the environment using regular expressions.
-# Depends: bashlib
+# Description: search for symbol names in the environment using regular expressions.
+# Depends: bashlib egrep
 # API:
 #  $1 - < --alias|--array|--exported|--function|--hash|--integer|--readonly|--regular >
 #  $@ - list of regular expressions
@@ -26,7 +25,7 @@ function find_symbol_names()
 #   find_sybmol_names --function "install_.*" "log_.*"
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _type_="${1##*--}"; shift
@@ -43,12 +42,12 @@ function find_symbol_names()
 
 #-------------------------------------------------------------------------------
 function expand_symbol_names()
-# Description:
-#  Expand symbol names into their full, quoted values for
-#  re-instantiation remotely. Functions and vars are returned as they
-#  are defined. Aliases, however, are prefixed with 'alias ' to enable
-#  simpler, automatic instantiation remotely.
-# Depends: bashlib
+# Description: Expand symbol names into their full, quoted values.
+# Depends: bashlib grep
+# Notes:
+#  Used for symbol re-instantiation remotely. Functions and vars are
+#  returned as they are defined. Aliases, however, are prefixed with
+#  'alias ' to enable simpler, automatic instantiation remotely.
 # API:
 #  $1 - < --alias|--array|--exported|--function|--hash|--integer|--readonly|--regular >
 #  $@ - list of regular expressions
@@ -62,9 +61,8 @@ function expand_symbol_names()
 #   expand_symbol_names --hash _${iid}_object_
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
-
     local _type_=${1}; shift
     local -a _found_names=()
     local -i n=
@@ -90,9 +88,9 @@ function expand_symbol_names()
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
-function exec_on()
+function run_remote()
 # Description: execute commands on a remote host
-# Depends: bashlib, ssh
+# Depends: bashlib ssh
 # API:
 #  $1 - remote hostname to run commands on
 #  $@ - command and args to execute remotely
@@ -106,10 +104,147 @@ function exec_on()
 #
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     # function body
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function netdot()
+# Description: source a remote file locally
+# Depends: bashlib ssh cat
+# API:
+#  $1 - remote host
+#  $@ - remote filename(s) to source locally
+# Inputs:
+# Outputs:
+# Environment: put remote data into local environment
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  source <(netdot user@adminserver file1 /usr/local/bin/file2 fileN)
+#-
+{
+    local _params_="${@}"
+    func-init
+
+    local _target="${1}"; shift
+    local -a _files=( "${@}" )
+
+    ssh ${_target} "for f in ${_files[@]}; do [[ -e \${f} ]] && cat \${f}; done" || {
+        _rtn=1 E="Error: unable to source some files"; error-f
+    }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function get_available_ciphers()
+# Description: dump list of available ssh ciphers
+# Depends: bashlib ssh
+# API:
+#  none
+# Inputs:
+# Outputs: cipher list
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  ciphers=( $(get_available_ciphers) ) # create an array of cipher names
+#-
+{
+    local _params_="${@}"
+    minimal-func-init
+
+    ssh -Q cipher
+
+    minimal-func-return;:
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function verify_cipher()
+# Description: verify specified cipher can connect to specified target
+# Depends: bashlib timeout ssh
+# API:
+#  $1 - remote username
+#  $2 - remote hostname
+#  $3 - remote port
+#  $4 - ciphername
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params_="${@}"
+    value-func-init
+
+    local _u=${1}
+    local _t=${2}
+    local _p=${3}
+    local _c=${4}
+
+    timeout 5 ssh -p ${_p} -c ${_c} ${_u}@${_t} "exit 0"
+
+    value-func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function get_valid_ciphers()
+# Description: get list of valid ciphers that can be used with target
+# Depends: bashlib
+# API:
+#  $1 - remote username
+#  $2 - remote hostname
+#  $3 - remote port
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params_="${@}"
+    func-init
+
+    verify_argc $# 3 || { _rtn=1 E="bad args"; error-f; }
+
+    local _u=${1} # user
+    local _t=${2} # target
+    local _p=${3} # port
+    local _c=     # cipher
+
+    for _c in $(get_available_ciphers); do
+
+        # attempt to connect
+        verify_cipher "${_u}" "${_t}" "${_p}" "${_c}" &>/dev/null
+        local _rtn=$?
+
+        (( _rtn == 124 )) && { E="connection ${_u}@${_t}:${_p} failed"; error-f; }
+
+        # return successful cipher
+        (( _rtn )) || echo "${_c}"
+
+    done
+
+    # no error
+    _rtn=0
 
     func-return
 }
@@ -120,26 +255,10 @@ function exec_on()
 
 #-------------------------------------------------------------------------------
 # stripped down log for remote use
-function log_lite()
+function log_remote()
 {
     # stripped down log function for remote operation
     cat <<<"log () { [[ \${#} -eq 0 ]] || echo >&2 \"\${*}\"; return 0; }"
-    return 0
-}
-
-#-------------------------------------------------------------------------------
-# method to source a file from a remote host
-function netdot()
-{
-    # $1  - remote host
-    # $2+ - remote file(s) to source locally
-    # usage:
-    # source <(netdot user@adminserver file1 /usr/local/bin/file2 finleN || exit 1) || exit 1
-    local _target="${1}"; shift
-    local -a _files=( "${@}" )
-
-    ssh ${_target} "for f in ${_files[@]}; do [[ -e \${f} ]] && cat \${f}; done" || return 1
-
     return 0
 }
 
@@ -168,6 +287,68 @@ function test_netdot()
     unset "${myfilearray[@]##*/}" myfilearray
 
 }
+
+
+# get a list of working ciphers
+function get_valid_ciphers() {
+    local _u=${1}
+    local _t=${2}
+    local _p=${3:-22}
+
+    local _c=
+    for _c in $(get_available_ciphers); do
+        test_cipher "${_u}" "${_t}" "${_p}" "${_c}" &>/dev/null
+        local _err=$?
+        (( _err )) || echo "${_c}"
+    done
+
+    (( _err == 124 )) && return 1
+
+    return 0
+}
+
+# what's the average time it takes to push and retrieve a generated
+# file of a specific size multiple times to/from target?
+
+
+
+function start_timer() {
+    SECONDS=0
+}
+
+function elapsed_time() {
+    echo ${SECONDS}
+}
+
+function run() {
+    eval ${@} &
+    wait $!
+}
+
+function timed_run() {
+    start_timer
+    run ${@}
+    elapsed_time
+}
+
+function stream() {
+    dd if=/dev/urandom bs=${1} count=${2} 2>/dev/null
+}
+
+function reflect() {
+    stdbuf -i0 -o0 -e0 cat -
+}
+
+
+# run it all
+echo
+echo "Testing for supported ciphers..."
+echo
+declare -a VALID_CIPHERS=()
+VALID_CIPHERS=( $(get_valid_ciphers ${1} ${2} ${3}) ) || exit 1
+echo
+echo "Valid ciphers:"
+echo "${VALID_CIPHERS[@]}"
 
 
 EOF

@@ -118,8 +118,10 @@ case "${1}" in
     -D|--debug)   _DEBUG_=true;   shift ;;
 esac
 
-# initialize logging, debug, and program subsystems
-log_init; log_debug_init; _params="${@}"; prog-init
+_params_="${@}"
+
+# initialize session, logging, debug, and program subsystems
+session-init; log_init; log_debug_init; prog-init
 
 # builtin help
 show_help "${@}"
@@ -129,17 +131,16 @@ show_help "${@}"
 #        P  R  O  G  R  A  M    C  O  N  F  I  G  U  R  A  T  I  O  N          #
 ################################################################################
 
-declare _self_="${0%*/}"
-declare _session_id_=$(gen_iid)
 
 
 ################################################################################
 #                 P  R  O  G  R  A  M     B  E  G  I  N  S                     #
 ################################################################################
 
-log_banner centered "Beginning session ${_session_id_} of ${_self_}" | log
-declare iid=${_session_id_}
+log_banner centered "${_self_}@session[ ${_session_} ]" | log
 
+
+# program code goes here #
 
 
 # exit macro

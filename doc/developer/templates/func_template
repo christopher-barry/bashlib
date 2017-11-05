@@ -2,7 +2,7 @@
 #-------------------------------------------------------------------------------
 function template_func()
 # Description: Standard function template
-# Depends: bashlib,
+# Depends: bashlib
 # API:
 #  $1 -
 #  $2 -
@@ -21,7 +21,7 @@ function template_func()
 #
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     # function body

@@ -11,7 +11,7 @@
 #-------------------------------------------------------------------------------
 function get_default_router()
 # Description: get the ip address of the default router
-# Depends: bashlib, iproute2
+# Depends: bashlib iproute2 grep
 # API:
 #  n/a
 # Inputs:
@@ -24,7 +24,7 @@ function get_default_router()
 #  local _my_router="$(get_default_router)"
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     minimal-func-init
 
     ip r | grep '^default.*$' | range [[:blank:]] 2-2
@@ -36,7 +36,7 @@ function get_default_router()
 #-------------------------------------------------------------------------------
 function get_default_interface()
 # Description: get the local interface attached to the default router
-# Depends: bashlib, iproute2
+# Depends: bashlib iproute2 grep
 # API:
 #  n/a
 # Inputs:
@@ -49,7 +49,7 @@ function get_default_interface()
 #  local _my_interface="$(get_default_interface)"
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     minimal-func-init
 
     ip r | grep '^default.*$' | range [[:blank:]] 4-4
@@ -61,7 +61,7 @@ function get_default_interface()
 #-------------------------------------------------------------------------------
 function get_default_interface_ip()
 # Description: get the default local interface ip address
-# Depends: bashlib,
+# Depends: bashlib iproute2 grep
 # API:
 #  n/a
 # Inputs:
@@ -74,7 +74,7 @@ function get_default_interface_ip()
 #  local _my_ip="$(get_default_interface_ip)"
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     ip r | grep -A1 '^default.*$' | grep -w link | range [[:blank:]] 11-11
@@ -86,7 +86,7 @@ function get_default_interface_ip()
 #-------------------------------------------------------------------------------
 function verify_host_icmp()
 # Description: verifies we can ping a host
-# Depends: bashlib, ping
+# Depends: bashlib ping
 # API:
 #  $1  - hostname|ipaddress
 # [$2] - optional interface name to go out through
@@ -100,13 +100,14 @@ function verify_host_icmp()
 #  verify_host_icmp myhost.mydomain.net eth1
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     verify_argc $# 1 2 || { _rtn=1 E="${_err} ${FUNCNAME}: invalid argument count"; error-f; }
 
     local _host_="${1}"
     local _interface_="${2}"
+
     local _net_timeout=5
     local _cmd="ping -c 1 -n -W ${NET_TIMEOUT:-${_net_timeout}} ${_interface_:+ -I ${_interface_}} ${_host_}"
 

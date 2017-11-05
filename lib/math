@@ -9,6 +9,36 @@
 ################################################################################
 
 #-------------------------------------------------------------------------------
+function calc()
+# Description: calculate floating point and integer math expressions
+# Depends: bashlib bc
+# API:
+#  $* - "expression to calulate"
+# Inputs: math expression
+# Outputs: numeric answer
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  calc "1 + 1"
+#  2
+#  calc "1.001 + 1.149"
+#  2.150
+#-
+{
+    local _params_="${@}"
+    func-init
+
+    local _expression_="${*}"
+
+    echo "${_expression_}" | bc
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
 function coin_toss()
 # Description: return 0 or 1 randomly
 # Depends: bashlib
@@ -23,7 +53,7 @@ function coin_toss()
 #
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _val=$(gen_random_int 9)
@@ -50,7 +80,7 @@ function gen_random_hex()
 #   FFE48A
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local -i c _count_=${1}
@@ -84,7 +114,7 @@ function gen_random_int()
 #    16
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     minimal-func-init
 
     local -i _max=${1}
@@ -101,9 +131,7 @@ function gen_random_int()
 
 #-------------------------------------------------------------------------------
 function gen_random_float()
-# Description:
-#   generates a very pseudo-random float up to a maximum value, with a
-#   set number of decimal places.
+# Description: generates random float up to a max with number of decimal places
 # Depends: bashlib
 # API:
 #   $1  - max number
@@ -119,7 +147,7 @@ function gen_random_float()
 #    3.11
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _int _dec _max=${1} _places=${2}

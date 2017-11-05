@@ -28,7 +28,7 @@ function verify_argc()
 #    verify_argc $# 2 4 || { _rtn=1 E="${_err} ${FUNCNAME}: invalid argument count"; error-f; }
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     (( $# < 2 )) || (( $# > 3 )) && { _rtn=1 E="${FUNCNAME}: bad number of args to test"; error-f; }
@@ -48,7 +48,7 @@ function verify_argc()
 #-------------------------------------------------------------------------------
 function evar()
 # Description: return the value of a var name
-# Depends:
+# Depends: bashlib
 # API:
 #  $1 - var name to resolve to its value
 # Examples:
@@ -73,7 +73,7 @@ function evar()
 #-------------------------------------------------------------------------------
 function elvar()
 # Description: return the value of an array element varname (varel)
-# Depends: evar()
+# Depends: bashlib
 # API:
 #  $1 - array name[index] of varel to resolve to its value
 # Examples:
@@ -98,6 +98,7 @@ function elvar()
 #-------------------------------------------------------------------------------
 function if_defined()
 # Description: execute function if it is defined, skip otherwise
+# Depends: bashlib
 # API:
 #  $1 - function name to test existance of.
 # Example:
@@ -107,7 +108,7 @@ function if_defined()
 #  1 on failure
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _f_=${1}; shift
@@ -125,8 +126,7 @@ function if_defined()
 #-------------------------------------------------------------------------------
 function get_stdin()
 # Description: get stdin unbuffered with a timeout
-# Depends:
-#  stdbuf, part of Debian's coreutils package
+# Depends: bashlib stdbuf
 # API:
 #  $1 - optional numeric timeout value in seconds.
 #  without $1, looks global ${BUFFER_WAIT} timeout value, and if
@@ -154,6 +154,7 @@ function get_stdin()
 #------------------------------------------------------------------------------
 function undup()
 # Description: string filter that replaces multiples of $2 with one $2
+# Depends: bashlib sed
 # API:
 #  $1 - sed delimiter (changable to avoid conflict)
 #  $2 - char
@@ -166,7 +167,7 @@ function undup()
 #  1 on failure
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _delim_=${1}
@@ -192,10 +193,8 @@ function undup()
 
 #-------------------------------------------------------------------------------
 function trim()
-# Description:
-#  by defaultm remove whitespace from both ends of a string, or if
-#  multi-line data is piped in, remove blank lines as well.
-#  if -F <delim> is used, removes delim from both ends of the line.
+# Description: remove whitespace|delim from string ends or blank lines
+# Depends: bashlib sed
 # API:
 #  [$1] - -F <delim>
 #  [$*] - string to trim, or stdin
@@ -207,7 +206,7 @@ function trim()
 #  1 on failure
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _delim_=
@@ -235,7 +234,7 @@ function trim()
 #-------------------------------------------------------------------------------
 function range()
 # Description: output range of fields, using zeroth-based indexing.
-# Depends: bashlib,
+# Depends: bashlib tr
 # API:
 #  $1 - delimeter
 #  $2 - start[-stop] as j[-k]. no k, k=NF
@@ -261,7 +260,7 @@ function range()
 #  two three four
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _delim_=${1}
@@ -318,7 +317,7 @@ function range()
 #-------------------------------------------------------------------------------
 function clean_cat()
 # Description: cats config-like files with comments and blank lines removed
-# Depends: bashlib
+# Depends: bashlib egrep
 # API:
 #  $1   - input_file
 #  [$2] - any additional regexes to strip
@@ -332,7 +331,7 @@ function clean_cat()
 #
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     minimal-func-init
 
     local _fn="${1}"; shift
@@ -348,7 +347,7 @@ function clean_cat()
 #-------------------------------------------------------------------------------
 function gen_regex_string()
 # Description: convert all param words into an 'or-type' regex string
-# Depends: bashlib,
+# Depends: bashlib sed
 # API:
 #  $@ - individual regexes
 # Inputs:
@@ -369,8 +368,8 @@ function gen_regex_string()
 
 #-------------------------------------------------------------------------------
 function tokenize()
-# Description:
-#  split the string on the delimiter.
+# Description: split the string on the delimiter
+# Depends: bashlib cat tr
 # API:
 #  $1 - delimiter
 #  $2 - delimited list
@@ -382,7 +381,7 @@ function tokenize()
 #  1 on failure
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     (( $# >= 1 )) || { _rtn=1 E="Error: bad args"; error-f; }
@@ -402,9 +401,8 @@ function tokenize()
 
 #-------------------------------------------------------------------------------
 function readhash()
-# Description:
-#  Generates a hash from key/value pairs on stdin. Behaves similarly
-#  to the 'readarray' builtin.
+# Description: generates a hash from key/value pairs on stdin, ala readarray
+# Depends: bashlib
 # API:
 #  $1   - associative array (hash) name (creates as global if undefined)
 #  [$2] - key/value delimiter character (defaults to =)
@@ -421,7 +419,7 @@ function readhash()
 #  1 on failure
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _hashname_=${1}
@@ -446,21 +444,19 @@ function readhash()
 
 #-------------------------------------------------------------------------------
 function gen_opt_str_hash_kv()
-# Description:
-#  Helps create hash assignments of the letters of an options string whose
-#  values are the numeric index of their positions in the string.
-#  See 'get_options' function in this file for usage.
+# Description: creates hash assignments of options letters with original index
+# Depends: bashlib
 # API:
 #  $1 - option string in getopts format
-# Example:
-#  local -A myhashname
-#  readhash myhashname <  <(gen_opt_str_hash_kv "${_opt_str_}")
 # Returns:
 #  0 on success
 #  1 on failure
+# Example:
+#  local -A myhashname
+#  readhash myhashname <  <(gen_opt_str_hash_kv "${_opt_str_}")
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _str_=$(echo "${1}" | tr -d :)
@@ -476,9 +472,9 @@ function gen_opt_str_hash_kv()
 
 #-------------------------------------------------------------------------------
 function convert_long_options()
-# Description: converts long option namess into short ones for get_options()
-# Depends:
-#  On two pre-set synchronized arrays of long and short options.
+# Description: converts long option names into short ones for get_options()
+# Depends: bashlib
+# Requires: pre-set synchronized arrays of long and short options.
 # API:
 #  $1 - long-opt-array-name
 #  $2 - short-opt-array-name
@@ -486,15 +482,15 @@ function convert_long_options()
 #        Note: passing just the names of the option array variables.
 # Output: The entered commandline ($3+) converted to use short options.
 # Examples:
-#      my_long_opts=(--this --is --the --long --optionlist) # long option names
-#     my_short_opts=( -t     -i    -h   -l     -o         ) # short option names
-#    all_short_opts=( $(convert_long_options my_long_opts my_short_opts "${@}") )
+#   my_long_opts=( --this --is --the --long --optionlist) # long option names
+#   my_short_opts=( -t     -i    -h   -l     -o         ) # short option names
+#   all_short_opts=( $(convert_long_options my_long_opts my_short_opts "${@}") )
 # Returns:
 #  0 on success
 #  1 on failure
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _a=
@@ -517,7 +513,7 @@ function convert_long_options()
 #-------------------------------------------------------------------------------
 function get_user_input()
 # Description: get input from user
-# Depends: bashlib,
+# Depends: bashlib sed
 # API:
 #  $1   - "prompt"
 #  [$2] - default
@@ -542,7 +538,7 @@ function get_user_input()
 #    _myinput="$(get_user_input "Tell me what you're thinking")"
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _prompt_="${1}"
@@ -580,7 +576,8 @@ function get_user_input()
 
 #-------------------------------------------------------------------------------
 function get_options()
-# Description: Extensible wrapper leveraging getopts.
+# Description: Extensible wrapper leveraging getopts
+# Depends: bashlib
 # API:
 # $1 - executable_name:        The main function to run.
 # $2 - long_opt_array_name:    The name of the array holding the long option names.
@@ -613,7 +610,7 @@ function get_options()
 #  !0 on failure
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     (( $# > 4 )) || { _rtn=1 E="bad args: '${*}'"; error-f; }
@@ -676,7 +673,7 @@ function get_options()
 #-------------------------------------------------------------------------------
 function try()
 # Description: execute and log a simple command
-# Depends: logging library is loaded
+# Depends: bashlib
 # API:
 #  [$1] - optional '--eval' evaluates the command and args.
 #  $*   - normally directly executes command and args.
@@ -688,7 +685,7 @@ function try()
 #  1 on failure
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     [[ "${1}" == "--eval" ]] && {
@@ -728,10 +725,10 @@ function show_help()
 #  show_help "${@}"
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     minimal-func-init
 
-    [[ "${_params}" =~ ((\ |^)-h(\ |$)|(\ |^)--help(\ |$)) ]] && {
+    [[ "${_params_}" =~ ((\ |^)-h(\ |$)|(\ |^)--help(\ |$)) ]] && {
         usage ${BASH_REMATCH[1]} ${0}
         exit 0
     }
@@ -744,7 +741,7 @@ function show_help()
 #-------------------------------------------------------------------------------
 function usage()
 # Description: output bashlib bash_template header data when -h or --help are the parameter
-# Depends: bashlib
+# Depends: bashlib readlink
 # API:
 #  $1 - <-h|--help> -h is minimal usage, --help if full usage.
 #  $2 - full path of script to get usage data from
@@ -758,7 +755,7 @@ function usage()
 #  usage --help ~/bin/myscript
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     # function body
@@ -820,7 +817,7 @@ function usage()
 #-------------------------------------------------------------------------------
 function show_embedded_comments()
 # Description: use to display specific formatted comment blocks.
-# Depends: readlink
+# Depends: bashlib readlink
 # API:
 #  [$1] - optional '-s' to skip displaying the markers
 #  [$2] - optional '-1' to exit after first match
@@ -834,7 +831,7 @@ function show_embedded_comments()
 #  1 on failure
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     # process options
@@ -906,8 +903,8 @@ function show_embedded_comments()
 
 #-------------------------------------------------------------------------------
 function get_status()
-# Description:
-#  Gets the last pipeline's cummulative status
+# Description: outputs on stdout the last pipeline's additive error code
+# Depends: bashlib
 # API:
 #  _rtn=$(get_status)
 #  return $(get_status)
@@ -927,7 +924,7 @@ function get_status()
 #-------------------------------------------------------------------------------
 function get_file_attributes()
 # Description: gets all relevent attributes of a file
-# Depends: bashlib
+# Depends: bashlib readlink stat file
 # API:
 # [$1] - -c|--canonicalize - use 'readlink -m' and test the final filename
 #  $1 - name of file to test
@@ -954,7 +951,7 @@ function get_file_attributes()
 #   Lisp/Scheme program, ASCII text
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     (( $# < 2 )) && {
@@ -1083,54 +1080,102 @@ function get_file_attributes()
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
-function get_lock()
-# Description:
-#  Creates a lock atomically (actually uses a directory). Will block for
-#  a maximum of specified or ${LOCK_WAIT} seconds if var is set, or
-#  FOREVER* if unset, if lock cannot be obtained.
+function request_mutex()
+# Description: Creates a mutex atomically
+# Depends: bashlib mkdir bc
+# Notes:
+#  creates mutex in: ${LOCK_BASE:-/var/run/lock}/${_self_}/${_session_}/.
+#  Hierarchy will be created if non existent and permission allows.
+#  Request will block for a maximum of specified, ${LOCK_WAIT}, or
+#  32768 seconds (if ${LOCK_WAIT} is unset) during mutex acquisition.
 # API:
-#  $1   - full path to lock dirname
-#  [$2] - Optional timeout. Falls back to ${LOCK_WAIT} if set, or
-#  *defaults to 32768 secs.
+#  [-t deci] - optional timeout in decimal seconds
+#  [-i numb] - optional check increment time in decimal or float seconds
+#  [-n name] - optional mutex name as rfc4122-v4 uuid
+#
 # Outputs:
-#  atomic lock name, or nothing on error.
-#  creates the empty directory as a lock in the filesystem.
+#  Atomic mutex name as a uuid, or nothing on error.  Creates the mutex
+#  as a directory in the filesystem. Writes the process_id of the mutex
+#  holder to a file named HOLDER_PID in the mutex directory.
 # Returns:
 #  0 on success
 #  1 on failure
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
-    local _lock=${1:?$(echo "lock name missing")}
-    local -i _wait=${2:-${LOCK_WAIT:-32768}}
-    local -i _count
-    until mkdir ${_lock} 2>/dev/null || (( _count++ == _wait )); do
-        sleep 1
+    local _mutex_=$(gen_uuid)
+
+    local _mutex_base="${LOCK_BASE:-/var/run/lock}/${_self_}/${_session_}"
+
+    mkdir -p "${_mutex_base}" &>/dev/null || {
+        _rtn=1 E="Error creating mutex base directory: '${_mutex_base}'"; error-f
+    }
+
+    while getopts :t:i:n: OPT; do
+        case $OPT in
+            t)
+                local _timeout_="${OPTARG}"
+                is_decimal ${_timeout_} || {
+                    _rtn=1 E="timeout must be a decimal number"; error-f
+                }
+                ;;
+            i)
+                local _check_increment_="${OPTARG}"
+                [[ $(is_decimal ${_check_increment_}) || $(is_float ${_check_increment_}) ]] || {
+                    _rtn=1 E="increment must be a number"; error-f;
+                }
+                ;;
+            n)
+                # override default mutex name with provided mutex name
+                local _mutex_="${OPTARG}"
+                is_uuid "${_mutex_}" || {
+                    _rtn=1 E="mutex name: '${_mutex_}' must be an rfc 4122 v4 UUID. Use 'gen_uuid()' to create."; error-f
+                }
+                ;;
+        esac
     done
-    (( _count >= _wait )) && { _rtn=1 E="${FUNCNAME}: acquiring lock '${1}' timed out"; error-f; }
-    echo ${_lock}
+    shift $(( OPTIND - 1 ))
+    OPTIND=1
+
+    local -i _max_attempts=$(echo "${_timeout_:-${LOCK_WAIT:-32768}} / ${_check_increment_:-0.5}" | bc)
+    local _mutex="${_mutex_base}/${_mutex_}"
+
+    local -i _attempts
+    until mkdir "${_mutex}" 2>/dev/null || (( _attempts++ == _max_attempts )); do
+        sleep ${_check_increment}
+    done
+
+    (( _attempts >= _max_attempts )) && { _rtn=1 E="acquiring mutex timed out"; error-f; }
+
+    # write holder's pid into file
+    echo "$!" > ${_mutex}/HOLDER_PID
+
+    echo ${_mutex}
 
     func-return
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
-function del_lock()
-# Description: removes a lock
+function release_mutex()
+# Description: removes a mutex
+# Depends: bashlib rm
 # API:
-#  $1 - full path to lock dirname
+#  $1 - mutex name
 # Returns:
 #  0 on success
 #  1 on failure
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _lock=${1}
-    rm -rf ${_lock} 2>/dev/null
+    is_lock ${_lock} && {
+        rm --preserve-root -rf ${_lock} 2>/dev/null
+    }
     _rtn=${?}
 
     func-return
@@ -1140,6 +1185,7 @@ function del_lock()
 #-------------------------------------------------------------------------------
 function gen_tempfile()
 # Description: generate a unique temp filename
+# Depends: bashlib mkdir touch
 # API:
 #  $1 - optional directory
 # Ouputs:
@@ -1149,7 +1195,7 @@ function gen_tempfile()
 #  1 on failure
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _f=
@@ -1164,19 +1210,18 @@ function gen_tempfile()
 
 #-------------------------------------------------------------------------------
 function gen_iid()
-# Description:
-#  creates a unique 8-character hex string for use in identifying
-#  parallel process instances in the logs
+# Description: creates a unique 8-character hex string
+# Depends: bashlib
 # API:
 #  n/a
 # Outputs:
-#  8-char hex string
+#  8-char hex string for parallel instance identification in logging
 # Returns:
 #  0 on success
 #  1 on failure
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _uuid=
@@ -1190,7 +1235,7 @@ function gen_iid()
 #-------------------------------------------------------------------------------
 function gen_jiffies()
 # Description: generates a subsecond timestamp
-# Depends:
+# Depends: bashlib date
 # API:
 #  n/a
 # Inputs: none
@@ -1209,7 +1254,7 @@ function gen_jiffies()
 #-------------------------------------------------------------------------------
 function gen_uuid()
 # Description: generate an rfc4122 v4 uuid
-# Depends: external program 'uuidgen'
+# Depends: bashlib uuidgen
 # API:
 #  n/a
 # Outputs:
@@ -1219,7 +1264,7 @@ function gen_uuid()
 #  1 on failure
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     [[ $(which uuidgen) ]] && {
@@ -1234,12 +1279,88 @@ function gen_uuid()
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
-function array_init()
-# Description:
-#  initializes an new array by populating 'size of array' number of
-#  elements to 'element string'. newline delimited.
+function signal()
+# Description: sends a signal to a running pid
+# Depends: bashlib kill
 # API:
-#  $1 - size of array
+#  $1 - pid of process to signal
+#  $2 - signal as name or number
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params_="${@}"
+    minimal-func-init
+
+    local _pid=${1}
+    local _sig=${2:-term}
+
+    try kill -${_sig} ${_pid}
+
+    minimal-func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function start_timer()
+# Description: start the clock [read with elapsed()]
+# Depends: bashlib
+# API: none
+# Inputs:
+# Outputs:
+# Environment: builtin $SECONDS
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  start_timer
+#-
+{
+    local _params_="${@}"
+    minimal-func-init
+
+    SECONDS=0
+
+    minimal-func-return;:
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function elapsed()
+# Description: returns time since last start_timer() call or script start
+# Depends: bashlib
+# API: none
+# Inputs:
+# Outputs: elapsed time
+# Environment: builtin $SECONDS
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  elapsed
+#-
+{
+    local _params_="${@}"
+    minimal-func-init
+
+    echo ${SECONDS}
+
+    minimal-func-return;:
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function array_init()
+# Description: initializes a new 'sizeof' array with specified element value
+# Depends: bashlib
+# API:
+#  $1 - sizeof array
 #  $2 - element string, defaults to ${EMPTY_ARG} if set, otherwise NONE.
 # Example:
 #  my_array=( $(array_init 3 "elem") )
@@ -1247,7 +1368,7 @@ function array_init()
 #  my array contains: elem elem elem
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local -i _sz_=${1}
@@ -1262,13 +1383,15 @@ function array_init()
 
 #-------------------------------------------------------------------------------
 function array_mask()
-# Description:
-#  create an array mask of a given array.  An array mask is related to
-#  another array in that it's elements are either a 1 or a 0 depending
-#  upon whether it's parent array has that element defined or it's set
-#  to a global empty argument.  Mask is 1 when the element is set, and
-#  0 when the element matches the empty argument string, e.g.
-#  in an unchanged state from that created by array_init()
+# Description: creates an array mask of a given array
+# Depends: bashlib
+# Notes:
+#  An array mask is related to another array in that it's elements are
+#  either a 1 or a 0 depending upon whether it's parent array has that
+#  element defined or it's set to a global empty argument.  Mask is 1
+#  when the element is set, and 0 when the element matches the empty
+#  argument string, e.g.  in an unchanged state from that created by
+#  array_init()
 # API:
 #  $1 - parent array to mask, passed in as name
 #  $2 - global empty element value, defaults to ${EMPTY_ARG} if set, otherwise NONE.
@@ -1280,7 +1403,7 @@ function array_mask()
 #    0 0 1
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _parent_=${1:?$(echo "bad args. ${FUNCNAME} <parent_array_name> [ampty-arg]")}
@@ -1297,8 +1420,8 @@ function array_mask()
 
 #-------------------------------------------------------------------------------
 function array_append()
-# Description:
-#  Append new data to an existing (or new) array using stdin
+# Description: Append new data to an existing (or new) array using stdin
+# Depends: bashlib
 # API:
 #  $1 - array to append to or create, passed in as name
 # Outputs:
@@ -1313,7 +1436,7 @@ function array_append()
 #  a b c d e f g h i j k l
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _arrayname_=${1}
@@ -1326,8 +1449,8 @@ function array_append()
 
 #-------------------------------------------------------------------------------
 function array_prepend()
-# Description:
-#  Prepend new data to an existing (or new) array using stdin
+# Description: Prepend new data to an existing (or new) array using stdin
+# Depends: bashlib
 # API:
 #  $1 - array to prepend to or create, passed in as name
 # Outputs:
@@ -1342,7 +1465,7 @@ function array_prepend()
 #  h i j k l a b c d e f g
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _arrayname_=${1}
@@ -1354,9 +1477,9 @@ function array_prepend()
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
-function array_printc()
+function array_printcols()
 # Description: print the contents of an array in n columns
-# Depends: bashlib,
+# Depends: bashlib
 # API:
 #  $1 - number of columns (defaults to 1)
 #  $2 - array name
@@ -1367,10 +1490,10 @@ function array_printc()
 #  0 on success
 #  1 on failure
 # Examples:
-#  array_printc 5 myarray
+#  array_printcols 5 myarray
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     (( $# < 2 )) && local cols=1 || { cols=${1}; shift; }
@@ -1393,10 +1516,10 @@ function array_printc()
 #-------------------------------------------------------------------------------
 function array_append_elements()
 # Description: append every element in an array with supplied string
-# Depends: n/a
+# Depends: bashlib
 # API:
 #  $1   - name of array to modify
-# "$2+" - string to append to each element
+# "$@" - string to append to each element
 # Outputs: modifies existing array
 # Returns:
 #  0 on success
@@ -1407,7 +1530,7 @@ function array_append_elements()
 #   after: myarray=( aX bX cX dX )
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _arrayname_=${1}; shift
@@ -1422,10 +1545,10 @@ function array_append_elements()
 #-------------------------------------------------------------------------------
 function array_prepend_elements()
 # Description: prepend every element in an array with supplied string
-# Depends: n/a
+# Depends: bashlib
 # API:
 #  $1   - name of array to modify
-# "$2+" - string to prepend to each element
+# "$@" - string to prepend to each element
 # Outputs: modifies existing array
 # Returns:
 #  0 on success
@@ -1436,7 +1559,7 @@ function array_prepend_elements()
 #   after: myarray=( Xa Xb Xc Xd )
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _arrayname_=${1}; shift
@@ -1451,10 +1574,10 @@ function array_prepend_elements()
 #-------------------------------------------------------------------------------
 function array_sort_elements()
 # Description: recreate the array sorted
-# Depends: n/a
+# Depends: bashlib sort
 # API:
 #  $1  - name of array to modify
-#  $2+ - options to sort command
+#  $@ - options to sort command
 # Outputs: modifies existing array
 # Returns:
 #  0 on success
@@ -1465,7 +1588,7 @@ function array_sort_elements()
 #   after: myarray=( d c b a )
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _arrayname_=${1}; shift
@@ -1480,7 +1603,7 @@ function array_sort_elements()
 #-------------------------------------------------------------------------------
 function array_replace_in_elements()
 # Description: recreate the array with string replacements
-# Depends: n/a
+# Depends: bashlib
 # API:
 #  $1 - name of array to modify
 #  $2 - string to replace
@@ -1500,7 +1623,7 @@ function array_replace_in_elements()
 #   after: myarray=( a31 b31 c33 d31 )
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _arrayname_=${1}
@@ -1522,7 +1645,7 @@ function array_replace_in_elements()
 #-------------------------------------------------------------------------------
 function array_delete_from_elements()
 # Description: recreate the array with string deletions
-# Depends: n/a
+# Depends: bashlib
 # API:
 #  $1 - name of array to modify
 #  $2 - string to delete
@@ -1541,7 +1664,7 @@ function array_delete_from_elements()
 #   after: myarray=( a1 b1 c d1 )
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     local _arrayname_=${1}
@@ -1562,7 +1685,7 @@ function array_delete_from_elements()
 #-------------------------------------------------------------------------------
 function find_array_element()
 # Description: tests for array, then searches for existence of an element value
-# Depends: bashlib
+# Depends: bashlib grep
 # API:
 #  $1 - arrayname
 #  $2 - string to search for
@@ -1576,7 +1699,7 @@ function find_array_element()
 #
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     minimal-func-init
 
     verify_argc $# 2 || return 1
@@ -1601,7 +1724,7 @@ function find_array_element()
 #-------------------------------------------------------------------------------
 function array_tac()
 # Description: echoes array contents in reverse order
-# Depends: bashlib
+# Depends: bashlib tac
 # API:
 #  $1 - arrayname
 # Returns:
@@ -1615,7 +1738,7 @@ function array_tac()
 #  array
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     minimal-func-init
 
     local _arr="${1}"
@@ -1646,12 +1769,9 @@ function array_tac()
 #-------------------------------------------------------------------------------
 function in_recursion()
 # Description: test if we spawned ourselves
-# Depends: bashlib,
+# Depends: bashlib
 # API:
-#  n/a
-# Inputs:
-# Outputs:
-# Environment:
+#  none
 # Returns:
 #  0 on success
 #  1 on failure
@@ -1666,33 +1786,27 @@ function in_recursion()
 
 #-------------------------------------------------------------------------------
 function is_executable()
-# Description: test if parameter is a valid and reachable executable
-# Depends: bashlib,
+# Description: test if parameter is a valid and /$PATH/ reachable executable
+# Depends: bashlib which
 # API:
 #  $1 - executable name
-# Inputs:
-# Outputs:
-# Environment:
 # Returns:
 #  0 on success
 #  1 on failure
 # Examples:
-#  is_exec cp && { cp this there/; }
+#  is_executable foo && { foo --this that; }
 #-
 {
-    [[ $(which ${1} &>/dev/null) ]]
+    [[ $(which "${1}" &>/dev/null) ]]
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_sourceable()
 # Description: test if parameter is a valid bash script file
-# Depends: bashlib,
+# Depends: bashlib file
 # API:
 #  $1 - full path to script name
-# Inputs:
-# Outputs:
-# Environment:
 # Returns:
 #  0 on success
 #  1 on failure
@@ -1710,6 +1824,7 @@ function is_sourceable()
 #-------------------------------------------------------------------------------
 function is_exist_file()
 # Description: checks if parameter is an existing file
+# Depends: bashlib
 # API:
 #  $1 - a full file path
 # Returns:
@@ -1717,13 +1832,14 @@ function is_exist_file()
 #  1 on failure
 #-
 {
-    [[ -e ${1} ]]
+    [[ -e "${1}" ]]
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_readable_file()
 # Description: checks if parameter is a file and is readable
+# Depends: bashlib
 # API:
 #  $1 - a full file path
 # Returns:
@@ -1731,13 +1847,14 @@ function is_readable_file()
 #  1 on failure
 #-
 {
-    [[ -r ${1} ]]
+    [[ -r "${1}" ]]
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_writable_file()
 # Description: checks if parameter is a file and is writable
+# Depends: bashlib
 # API:
 #  $1 - a full file path
 # Returns:
@@ -1745,14 +1862,14 @@ function is_writable_file()
 #  1 on failure
 #-
 {
-    [[ -w ${1} ]]
+    [[ -w "${1}" ]]
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_devnode()
-# Description:
-#  checks if parameter is a block or character special device node
+# Description: checks if parameter is a block or character special device node
+# Depends: bashlib
 # API:
 #  $1 - full or relative device node path
 # Returns:
@@ -1760,14 +1877,14 @@ function is_devnode()
 #  1 on failure
 #-
 {
-    is_blk_devnode ${1} || is_char_devnode ${1}
+    is_blk_devnode "${1}" || is_char_devnode "${1}"
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_blk_devnode()
-# Description:
-#  checks if parameter is a block special device node, canonicalizing links.
+# Description: checks if parameter is a block special device node, canonicalizing links.
+# Depends: bashlib readlink
 # API:
 #  $1 - full or relative device node path
 # Returns:
@@ -1775,14 +1892,14 @@ function is_blk_devnode()
 #  1 on failure
 #-
 {
-    [[ -b $(readlink -e ${1}) ]]
+    [[ -b $(readlink -e "${1}") ]]
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_char_devnode()
-# Description:
-#  checks if parameter is a character special device node, canonicalizing links.
+# Description: checks if parameter is a character special device node, canonicalizing links.
+# Depends: bashlib readlink
 # API:
 #  $1 - full or relative device node path
 # Returns:
@@ -1790,14 +1907,14 @@ function is_char_devnode()
 #  1 on failure
 #-
 {
-    [[ -c $(readlink -e ${1}) ]]
+    [[ -c $(readlink -e "${1}") ]]
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_fifo()
-# Description:
-#  checks if parameter is a fifo (named pipe).
+# Description: checks if parameter is a fifo (named pipe).
+# Depends: bashlib
 # API:
 #  $1 - full path to fifo
 # Returns:
@@ -1805,14 +1922,14 @@ function is_fifo()
 #  1 on failure
 #-
 {
-    [[ -p ${1} ]]
+    [[ -p "${1}" ]]
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_named_pipe()
-# Description:
-#  checks if parameter is a named pipe (fifo).
+# Description: checks if parameter is a named pipe (fifo).
+# Depends: bashlib
 # API:
 #  $1 - full path to fifo
 # Returns:
@@ -1820,13 +1937,14 @@ function is_named_pipe()
 #  1 on failure
 #-
 {
-    is_fifo ${1}
+    is_fifo "${1}"
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_exist_dir()
 # Description: checks if parameter is an existing dir
+# Depends: bashlib
 # API:
 #  $1 - a full dir path
 # Returns:
@@ -1834,13 +1952,14 @@ function is_exist_dir()
 #  1 on failure
 #-
 {
-    [[ -d ${1} ]]
+    [[ -d "${1}" ]]
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_readable_dir()
 # Description: checks if parameter is a directory and is readable
+# Depends: bashlib
 # API:
 #  $1 - a full dir path
 # Returns:
@@ -1848,13 +1967,14 @@ function is_readable_dir()
 #  1 on failure
 #-
 {
-    [[ -r ${1} && -d ${1} ]]
+    [[ -r "${1}" && -d "${1}" ]]
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_writable_dir()
 # Description: checks if parameter is a directory and is writable
+# Depends: bashlib
 # API:
 #  $1 - a full dir path
 # Returns:
@@ -1862,19 +1982,16 @@ function is_writable_dir()
 #  1 on failure
 #-
 {
-    [[ -w ${1} && -d ${1} ]]
+    [[ -w "${1}" && -d "${1}" ]]
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_function()
 # Description: test if parameter is a defined function name
-# Depends: bashlib,
+# Depends: bashlib
 # API:
 #  $1 - function name
-# Inputs:
-# Outputs:
-# Environment:
 # Returns:
 #  0 on success
 #  1 on failure
@@ -1882,19 +1999,16 @@ function is_function()
 #  is_function my_func && { my_func foo bar; }
 #-
 {
-    [[ "$(typeset -F ${1})" == "${1}" ]]
+    [[ "$(typeset -F "${1}")" == "${1}" ]]
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_hash()
 # Description: test if parameter is set and an associative array (hash)
-# Depends: bashlib,
+# Depends: bashlib
 # API:
 #  $1 - hash name
-# Inputs:
-# Outputs:
-# Environment:
 # Returns:
 #  0 on success
 #  1 on failure
@@ -1902,33 +2016,31 @@ function is_hash()
 #  is_hash my_hash && { foo=${my_hash[bar]}; }
 #-
 {
-    [[ "$(typeset -p ${1} 2>/dev/null)" =~ ^(declare|local)[[:blank:]]+(-A)[[:blank:]].*$ ]]
+    [[ "$(typeset -p "${1}" 2>/dev/null)" =~ ^(declare|local)[[:blank:]]+(-A)[[:blank:]].*$ ]]
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_array()
 # Description: test if parameter is set and an index array
-# Depends: bashlib,
+# Depends: bashlib
 # API:
 #  $1 - array name
-# Inputs:
-# Outputs:
-# Environment:
 # Returns:
 #  0 on success
 #  1 on failure
 # Examples:
-#
+#  is_array my_array && { foo="${my_array[0]}"; }
 #-
 {
-    [[ "$(typeset -p ${1} 2>/dev/null)" =~ ^(declare|local)[[:blank:]]+(-a)[[:blank:]].*$ ]]
+    [[ "$(typeset -p "${1}" 2>/dev/null)" =~ ^(declare|local)[[:blank:]]+(-a)[[:blank:]].*$ ]]
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_alpha()
 # Description: checks if parameter is alpha
+# Depends: bashlib
 # API:
 #  $1 - string to test
 # Returns:
@@ -1936,13 +2048,14 @@ function is_alpha()
 #  1 on failure
 #-
 {
-    [[ ${1} =~ ^[[:alpha:]]+$ ]]
+    [[ "${1}" =~ ^[[:alpha:]]+$ ]]
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_alphanumeric()
 # Description: checks if parameter is alphanumeric
+# Depends: bashlib
 # API:
 #  $1 - string to test
 # Returns:
@@ -1955,8 +2068,9 @@ function is_alphanumeric()
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
-function is_numeric()
-# Description: checks if parameter is a hex or decimal number
+function is_word()
+# Description: checks if parameter is alphanumeric plus "_"
+# Depends: bashlib
 # API:
 #  $1 - string to test
 # Returns:
@@ -1964,13 +2078,29 @@ function is_numeric()
 #  1 on failure
 #-
 {
-    [[ ${1} =~ ^(0x)?[0-9a-fA-F]+$ ]]
+    [[ ${1} =~ ^[[:word:]]+$ ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_numeric()
+# Description: checks if parameter is a hex, decimal, or float number
+# Depends: bashlib
+# API:
+#  $1 - string to test
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ ${1} =~ ^(0x)?[[:xdigit:]]+$ ]] || [[ $(is_float ${1}) ]]
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_decimal()
 # Description: checks if parameter is a decimal number
+# Depends: bashlib
 # API:
 #  $1 - string to test
 # Returns:
@@ -1978,13 +2108,44 @@ function is_decimal()
 #  1 on failure
 #-
 {
-    [[ ${1} =~ ^[0-9]+$ ]]
+    [[ "${1}" =~ ^[[:digit:]]+$ ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_hex()
+# Description: checks if parameter is a hexidecimal number
+# Depends: bashlib
+# API:
+#  $1 - string to test
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ "${1}" =~ ^[[:xdigit:]]+$ ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_float()
+# Description: checks if parameter is a floating point number
+# Depends: bashlib
+# API:
+#  $1 - string to test
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ "${1}" =~ ^([[:digit:]]+\.[[:digit:]]+)$ ]]
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_bool()
 # Description: checks if parameter is a boolean value
+# Depends: bashlib
 # API:
 #  $1 - string to test
 # Returns:
@@ -1992,13 +2153,29 @@ function is_bool()
 #  1 on failure
 #-
 {
-    [[ ${1} =~ ^0$|^1$|^[Yy][Ee][Ss]$|^[Nn][Oo]$|^[Oo][Nn]$|^[Oo][Ff][Ff]$|^[Tt][Rr][Uu][Ee]$|^[Ff][Aa][Ll][Ss][Ee]$ ]]
+    [[ "${1}" =~ ^0$|^1$|^[Yy][Ee][Ss]$|^[Nn][Oo]$|^[Oo][Nn]$|^[Oo][Ff][Ff]$|^[Tt][Rr][Uu][Ee]$|^[Ff][Aa][Ll][Ss][Ee]$ ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function is_string()
+# Description: checks if parameter is a string
+# Depends: bashlib
+# API:
+#  $1 - string to test
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    [[ "${1}" =~ ^[^[:cntrl:]]*$ ]]
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_true()
 # Description: checks if parameter represents true
+# Depends: bashlib
 # API:
 #  $1 - string to test
 # Returns:
@@ -2006,13 +2183,14 @@ function is_true()
 #  1 on failure
 #-
 {
-    [[ ${1} =~ ^1$|^[Tt][Rr][Uu][Ee]$|^[Yy][Ee][Ss]$|^[Oo][Nn]$ ]]
+    [[ "${1}" =~ ^1$|^[Tt][Rr][Uu][Ee]$|^[Yy][Ee][Ss]$|^[Oo][Nn]$ ]]
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_false()
 # Description: checks if parameter represents false
+# Depends: bashlib
 # API:
 #  $1 - string to test
 # Returns:
@@ -2020,13 +2198,15 @@ function is_false()
 #  1 on failure
 #-
 {
-    [[ ${1} =~ ^0$|^[Ff][Aa][Ll][Ss][Ee]$|^[Nn][Oo]$|^[Oo][Ff][Ff]$ ]]
+    [[ "${1}" =~ ^0$|^[Ff][Aa][Ll][Ss][Ee]$|^[Nn][Oo]$|^[Oo][Ff][Ff]$ ]]
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
-function is_locked()
-# Description: checks if parameter is an existing lock
+function is_lock()
+
+# Description: checks if parameter is an existing bashlib-style lock
+# Depends: bashlib
 # API:
 #  $1 - lock name to test
 # Returns:
@@ -2034,13 +2214,14 @@ function is_locked()
 #  1 on failure
 #-
 {
-    [[ -d ${1} ]]
+    is_exist_dir "${1}" && is_uuid "${1%*/}"
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_iid()
 # Description: checks if parameter is an iid (8-char numeric)
+# Depends: bashlib
 # API:
 #  $1 - string to test
 # Returns:
@@ -2048,13 +2229,14 @@ function is_iid()
 #  1 on failure
 #-
 {
-    (( ${#1} == 8 )) && [[ ${1} =~ ^[a-f0-9]{8}$ ]]
+    (( ${#1} == 8 )) && [[ "${1}" =~ [[:xdigit:]]{8} ]]
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function is_uuid()
 # Description: checks if parameter is an rfc 4122 version 4 UUID
+# Depends: bashlib
 # API:
 #  $1 - string to test
 # Returns:
@@ -2062,8 +2244,8 @@ function is_uuid()
 #  1 on failure
 #-
 {
-    (( ${#1} == 34 )) && {
-        [[ ${1} =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[4][a-f0-9]{3}-[ab89][a-f0-9]{3}-[a-f0-9]{12}$ ]]
+    (( ${#1} == 36 )) && {
+        [[ "${1}" =~ [[:xdigit:]]{8}-[[:xdigit:]]{4}-[4]{1}[[:xdigit:]]{3}-[ab89]{1}[[:xdigit:]]{3}-[[:xdigit:]]{12} ]]
     }
 }
 ##------------------------------------------------------------------------------
@@ -2071,6 +2253,7 @@ function is_uuid()
 #-------------------------------------------------------------------------------
 function is_lvmid()
 # Description: checks if parameter is in LVM UUID=* format
+# Depends: bashlib
 # API:
 #  $1 - string to test
 # Returns:
@@ -2079,7 +2262,7 @@ function is_lvmid()
 #-
 {
     (( ${#1} == 41 )) && {
-        [[ ${1} =~ ^UUID=[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ ]]
+        [[ "${1}" =~ UUID=[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12} ]]
     }
 }
 ##------------------------------------------------------------------------------
@@ -2087,6 +2270,7 @@ function is_lvmid()
 #-------------------------------------------------------------------------------
 function is_vfatid()
 # Description: checks if parameter is in vfat UUID=* format
+# Depends: bashlib
 # API:
 #  $1 - string to test
 # Returns:
@@ -2094,7 +2278,7 @@ function is_vfatid()
 #  1 on failure
 #-
 {
-    (( ${#1} == 14 )) && [[ ${1} =~ ^UUID=[A-F0-9]{4}-[A-F0-9]{4}$ ]]
+    (( ${#1} == 14 )) && [[ "${1}" =~ UUID=[A-F0-9]{4}-[A-F0-9]{4} ]]
 }
 ##------------------------------------------------------------------------------
 
@@ -2108,6 +2292,6 @@ function is_disk_label()
 #  1 on failure
 #-
 {
-    [[ "${1}" =~ ^LABEL=[^[:blank:]]+$ ]]
+    [[ "${1}" =~ LABEL=[^[:blank:]]+ ]]
 }
 ##------------------------------------------------------------------------------

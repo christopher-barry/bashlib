@@ -11,7 +11,7 @@
 #-------------------------------------------------------------------------------
 function log_init()
 # Description: initializes the logging subsytem. run early.
-# Depends:
+# Depends: bashlib which mkdir
 # API:
 #  n/a
 # Inputs:
@@ -62,11 +62,11 @@ function log_init()
 #-------------------------------------------------------------------------------
 function log()
 # Description: command stdout logging filter or normal log message writer.
-# Depends: stdbuf
+# Depends: bashlib stdbuf logger
 #  Soft dependency on 'logger'. Will notice but use builtin routine if
 #  it's not installed. logger is required to log to syslog.
-# Global Variables: Defaults set at top of this library, override as required.
-#   ${_VERBOSE_}  - Output to console too.
+# Global Variables: Defaults set base.cfg, override as required.
+#   ${_VERBOSE_}  - Output to console as well as log.
 #   ${_DEBUG_}    - Set priority to 'debug', overriding any previous setting.
 #   ${USE_SYSLOG} - true|false.
 #   ${LOG_FACILITY} - See man syslog for valid facilities.
@@ -82,14 +82,18 @@ function log()
 #  is sent to the console as well as the log. For 'Error', the priority is
 #  set to 'err', and for 'Warning' priority is set to 'warning'.
 # API:
-#  $* - string to log
-#  or accept on stdin some command's output
+#  $* - string to log | '--serialize' to generate minimal remote log() function
+#  -OR- accept on stdin some command's output
 # Examples:
 #  my_command | log
 #  log "this is a message"
+#  log --serialize
 #-
 {
     minimal-func-init
+
+    # serialize minimal logging function for remote use
+    [[ "${1}" == "--serialize" ]] && { log_remote; return 0; }
 
     # logs message string
     [[ "${*}" != "" ]] && {
@@ -125,7 +129,7 @@ function log()
 #-------------------------------------------------------------------------------
 function log_syslog()
 # Description: wrap syslog's logger to match generic logger name. internal use.
-# Depends: log(), external 'logger'
+# Depends: bashlib logger
 # API:
 #  $1 - facility.priority
 #  $2 - tag (log uses program name)
@@ -141,7 +145,7 @@ function log_syslog()
 #-------------------------------------------------------------------------------
 function log_direct()
 # Description: internal routine to log to a file and mimic logger. internal use.
-# Depends: log()
+# Depends: bashlib date
 # API:
 #  $1 - facility.priority
 #  $2 - tag (log uses program name)
@@ -155,9 +159,32 @@ function log_direct()
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
+function log_remote()
+# Description: generates a simple log function for remote use
+# Depends: bashlib cat
+# API:     none
+# Inputs:  none
+# Outputs: log function definition
+# Environment: none
+# Returns:
+#  0 on success
+# Examples:
+#  log_remote
+#-
+{
+    local _params_="${@}"
+    minimal-func-init
+
+    cat <<<"log () { [[ \${#} -eq 0 ]] || echo >&2 \"\${*}\"; return 0; }"
+
+    minimal-func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
 function log_error()
 # Description: dump pertinent and formatted error data when invoked.
-# Depends:
+# Depends: bashlib
 # API:
 # [$1] - [--exit|--return] only when used as:
 #                          'return $(log_error --return $? 1 "error mesage")'
@@ -224,7 +251,7 @@ function log_error()
         log " \`-Stack   : ${_rstack[@]/%/ ->} self()"
     }
 
-    # uncomment for help debugging index issues
+    # uncomment '^log.*$' lines for help debugging index issues
     #log "__________________________"
     #log "#### debugging arrays ####"
     #log "funcname:      ${FUNCNAME[@]}"
@@ -250,7 +277,7 @@ function log_error()
 #-------------------------------------------------------------------------------
 function log_jiffies()
 # Description: Same as gen_giffies, duplicated here to make 'logging' independent
-# Depends:
+# Depends: bashlib date
 # API:
 #  n/a
 # Inputs: none
@@ -269,7 +296,7 @@ function log_jiffies()
 #-------------------------------------------------------------------------------
 function log_iid()
 # Description: generates a random 8-char hex number.
-# Depends: external program: uuidgen
+# Depends: bashlib uuidgen
 # API:
 #  n/a
 # Inputs: none
@@ -278,18 +305,18 @@ function log_iid()
 #  0 on success
 #  1 on failure
 # Examples:
-#  iid=$(log_iid)
+#  local _iid=$(log_iid)
 #-
 {
-    local iid=$(uuidgen)
-    echo "${iid:0:8}"
+    local _iid=$(uuidgen)
+    echo "${_iid:0:8}"
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function log_repeat()
 # Description: repeat a given character n times
-# Depends:
+# Depends: bashlib
 # API:
 #  $1 - character to repeat
 #  $2 - number of times to repeat it
@@ -325,7 +352,7 @@ function log_repeat()
 #-------------------------------------------------------------------------------
 function log_kern()
 # Description: inserts n spaces between characters in message
-# Depends:
+# Depends: bashlib
 # API:
 #  $1 - number of kerning spaces
 #  $* - the string to kern
@@ -364,7 +391,7 @@ function log_kern()
 #-------------------------------------------------------------------------------
 function log_center()
 # Description: tried to center the string within specified columns
-# Depends:
+# Depends: bashlib
 # API:
 #  $1 - column min/max charcter
 #  $2 - the number of columns to center within
@@ -402,7 +429,7 @@ function log_center()
 #-------------------------------------------------------------------------------
 function log_banner()
 # Description: format different types of log header
-# Depends:
+# Depends: bashlib
 # API:
 #  $1 - type:-thin,centered,comment_header
 #  $* - header string
@@ -458,7 +485,7 @@ function log_banner()
 #-------------------------------------------------------------------------------
 function log_fd()
 # Description: outputs to a specified file descriptor number
-# Depends:
+# Depends: bashlib
 # API:
 # [$1] - option to echo -[en]
 #  $1  - fd number
@@ -489,40 +516,9 @@ function log_fd()
 ################################################################################
 
 #-------------------------------------------------------------------------------
-function log_debug_noise_filter()
-# Description: body of a filtering coprocess to reduce debug noise
-# Depends: bashlib, stdbuf
-# API:
-#  $* - a regular expression of patterns to remove from debug log stream
-# Inputs: raw xtrace output
-# Outputs: regex filtered xtrace output
-# Returns:
-#  0 on success
-#  1 on failure
-# Examples:
-#  internal use. See log_debug_init for coproc implementation details
-#-
-{
-    minimal-func-init
-
-    local _drop_regex_="${*}"
-
-    local _line=
-    while read -t ${LOG_WAIT:-5} _line
-    do
-        [[ "${_line}" =~ ${_drop_regex_} ]] || {
-            echo "${_line}"
-        }
-    done < <(stdbuf -i0 -o0 -e0 cat -)
-
-    minimal-func-return
-}
-##------------------------------------------------------------------------------
-
-#-------------------------------------------------------------------------------
 function log_debug_init()
 # Description: initialize the debug logging subsystem if _DEBUG_ is set.
-# Depends:
+# Depends: bashlib basename dirname mkdir
 # API:
 #  n/a
 # Inputs:  environment settings initially from base.cfg
@@ -543,14 +539,24 @@ function log_debug_init()
     [[ ${DEBUG_FN} ]] || DEBUG_FN="${LOG_DIR:-${HOME}/log}/$(basename ${SOURCE[0]:-${0}}).debug"
     mkdir -p $(dirname ${DEBUG_FN}) || { log_fd 2 "ERROR: cannot write debug log data to: ${DEBUG_FN}"; exit 1; }
 
-    # resolve regex array into a filter string
-    local _filter_regexes="$(gen_regex_string "${DEBUG_DROP_LINES[@]}")"
+    # resolve regex array into a filter string file
+    # this file is sourced into the coproc on sighup
+    # so the filter can be updated on the fly
+    debug_regex_filter_file=${_rundir_}/debug_filter.regex
+    echo _drop_regex_=\'"$(gen_regex_string "${DEBUG_DROP_LINES[@]}")"\' >${debug_regex_filter_file}
+    local $(<"${debug_regex_filter_file}")
 
     # put debug log file on fd4.
     exec 4>${DEBUG_FN}
 
     # create setx filtering co-process with it's standard output redirected to the debug log.
-    coproc log_debug_noise_filter "${_filter_regexes}" 1>&4
+    coproc log_debug_noise_filter "${_drop_regex_}" "${debug_regex_filter_file}" 1>&4
+
+    # filter pid
+    echo ${COPROC_PID} >${_rundir_}/debug_filter_coproc.pid
+
+    # tell the coproc to source it's configuration
+    signal sighup ${COPROC_PID}
 
     # close fd4 as coproc stdout (it's redirecting to a file now).
     exec 4>&-
@@ -595,9 +601,52 @@ function log_debug_init()
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
+function log_debug_noise_filter()
+# Description: body of a filtering coprocess to reduce debug noise
+# Depends: bashlib stdbuf
+# API:
+#  $1 - configured rexex pattern string to remove from io stream
+#  $2 - a sourceable file of regex patterns to remove from stream
+#  sighup - forces a reload of the regular expression string
+# Inputs: raw xtrace output, sighup to reload regexes
+# Outputs: regex filtered xtrace output
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  internal use. See log_debug_init for coproc implementation details
+#-
+{
+    local _params_="${@}"
+    coproc-func-init
+
+    local _drop_regex_="${1}"
+
+    {
+        local _line=
+        while read -t ${LOG_WAIT:-5} _line
+        do
+            # allow reloading
+            trap "source ${_source_env_fn}" USR1
+
+            [[ "${_line}" =~ ${_drop_regex_} ]] || {
+                echo "${_line}"
+            }
+        done < <(stdbuf -i0 -o0 -e0 cat -)
+    } &
+
+    local _bg_loop_pid=$!
+
+    wait ${_bg_loop_pid}
+
+    coproc-func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
 function log_debug_section_header()
 # Description: mark in the debug log when we enter and exit functions
-# Depends:
+# Depends: bashlib
 # API:
 #  ${1} - 0|1 enter|exit
 #  ${2} - function index
@@ -618,7 +667,7 @@ function log_debug_section_header()
 #-------------------------------------------------------------------------------
 function log_debug_control()
 # Description: turn debug output on or off based upon function name
-# Depends:
+# Depends: bashlib
 # API:
 #  n/a
 # Inputs: ${DEBUG_EXCLUDES[@]} array of function names
@@ -643,7 +692,7 @@ function log_debug_control()
 #-------------------------------------------------------------------------------
 function log_debug_on()
 # Description: turn debug output on
-# Depends:
+# Depends: bashlib
 # API:
 #  [${1}] - function index
 # Inputs: none
@@ -666,7 +715,7 @@ function log_debug_on()
 #-------------------------------------------------------------------------------
 function log_debug_off()
 # Description: turn debug output off
-# Depends:
+# Depends: bashlib
 # API:
 #  [${1}] - function index
 # Inputs: none
@@ -687,7 +736,7 @@ function log_debug_off()
 #-------------------------------------------------------------------------------
 function log_debug_get_state()
 # Description: get current state of xtrace
-# Depends:
+# Depends: bashlib
 # API:
 #  n/a
 # Inputs: none
@@ -706,7 +755,7 @@ function log_debug_get_state()
 #-------------------------------------------------------------------------------
 function log_debug_set_state()
 # Description: sets debug output to on or off
-# Depends:
+# Depends: bashlib
 # API:
 #  ${1} - 0|1 - 0 = off, 1 = on
 # Inputs: int
