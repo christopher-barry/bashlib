@@ -111,6 +111,9 @@ dst_musicdir=Music/
 src_basedir=/home/cbarry
 src_musicdir=music
 
+# increase log wait for large transfers
+LOG_WAIT=300
+
 ################################################################################
 #               P  R  O  G  R  A  M     B  E  G  I  N  S                       #
 ################################################################################
