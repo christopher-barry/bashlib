@@ -1298,8 +1298,8 @@ function signal()
     local _params_="${@}"
     minimal-func-init
 
-    local _pid=${1}
-    local _sig=${2:-term}
+    local _sig=${1:-term}
+    local _pid=${2}
 
     try kill -${_sig} ${_pid}
 
