@@ -96,7 +96,7 @@ alias _-init-_=
 
 alias this-script-fullpath='SCRIPT_SOURCE="${0}"'
 
-alias this-script-name='_self_="${0%*/}"'
+alias this-script-name='_self_="${0##*/}"'
 
 # allow maintaining a known session id using WITH_SESSION, along with
 # KEEP_RUNDIR to make data structures persistent across program
@@ -120,10 +120,16 @@ alias this-rundir-init='mkdir -p ${_rundir_}'
 #
 # the location must be writable by the user running the application.
 #
-alias this-rundir='_rundir_=${WITH_RUNDIR:-/run/user}/$(id -u)/${_self_}/${_session_}; this-rundir-init'
+alias this-rundir='_rundir_=${WITH_RUNDIR:-/run/user}/$(id -u)/${_self_}/${_session_}'
+
+alias this-struct-root='_structdir__=${_rundir_}/struct'
+
+alias this-struct-typedefs='_structdefs_=${_structdir_}/typedefs'
+
+alias this-struct-data='_structdata_=${_structdir_}/data'
 
 # init session for this instance
-alias session-init='this-script-fullpath; this-script-name; this-session; this-rundir'
+alias session-init='this-script-fullpath; this-script-name; this-session; this-rundir; this-rundir-init; this-struct-root; this-struct-typedefs; this-struct-data'
 
 ##----------------------------------------------------------------------
 
@@ -259,4 +265,4 @@ begin= end= state= line=
 function remove_macros() { shopt -u expand_aliases; unalias ${MACRO_NAMES[@]} &>/dev/null; }
 
 # called to remove unique temp work area
-function remove_rundir() { [[ -d ${_rundir_} ]] && { [[ ${KEEP_RUNDIR} ]] || rm --preserve-root -rf ${_rundir_}; }; }
+function remove_rundir() { (( KEEP_RUNDIR )) || { [[ -d ${_rundir_} ]] &&  rm --preserve-root -rf ${_rundir_}; }; }

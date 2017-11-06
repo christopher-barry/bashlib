@@ -15,8 +15,8 @@ function typedef()
 # Description: creates/deletes a structured data record type definition
 # Depends: bashlib,
 # API:
-# switches: <-C|--create type_name> <record_type:record_name[:validator_funcname]> ...
-#           <-D|--delete type_name>
+# switches: <-c|--create type_name> [-i|--inherit struct]  <record_type:record_name[:validator_funcname]> ...
+#           <-d|--delete type_name>
 #     $1 - type name
 #     $@ - record <type>:<name>[:validator] list, where: (in create mode only)
 #         <type> is one of:
@@ -28,18 +28,21 @@ function typedef()
 #            'i' for integer number
 #            's' for string
 #     and <name> is an [[:word:]]+ name for the record.
+#
 #     if [:validator] is present, making the parameter a colon
 #     separated triplet, then 'validator' is the name of an existing
 #     function that will be used to validate the information when it
-#     is assigned to 'name' with the:
-#         'rec <recname> set <-[isb]> <name> <value>' or
-#         'rec <recname> set <-[aA]> <name> <<index|+>|key> <value>'
-#     command. 'validator' must take <name> as it's only parameter and
-#     return true or false.
+#     is assigned to 'name' with:
+#
+#      '_set struct <name> <recname> <value>' for type=[bfhis], or
+#      '_set struct <name> <recname> <<index|+>|key> <value>' for [Aa] types.
+#
+#     'validator' functions must take <value> as their only parameter and
+#     return true or false only, with no output.
 # Inputs:
 # Outputs:
 # Environment:
-#  BASHLIB_STRUCT_BASE == the base directory for struct data and template storage
+#   see session macros
 # Returns:
 #  0 on success
 #  1 on failure
@@ -49,7 +52,7 @@ function typedef()
 #               s:telnum:valid_telnum a:bednum:valid_bednum \
 #               A:beds:valid_beds b:occupied A:occupant:valid_occupant
 #  this creates a struct 'template', saving it to:
-#    ${_rundir_}/${_struct_typedir_}/${1}
+#    ${_structdir_}/${_struct_name_}
 #    or, in plain English, something like:
 #    /run/user/$USER/my_script_name/26674360-fbdb-4f2f-83cd-73779a67c4b0/struct/type/hotel_room
 #    putting the data in the tmpfs filesystem for better performance.
@@ -61,44 +64,59 @@ function typedef()
 {
     local _params_="${@}"
     func-init
+    verify_argc $# 3 $# || { _rtn=1 E="${_err} ${FUNCNAME}: invalid argument count"; error-f; }
 
-    local -a _lo=( --create --delete )
-    local -a _so=( -C -D )
-    local -a _the_opts=$( $(convert_long_options _lo _so "${_params_}") )
+    local -a _lo=( --create --inherit --delete )
+    local -a _so=(  -c       -i       -d )
+    local -a _the_opts=( $(convert_long_options _lo _so "${_params_}") )
 
-    while getopts :CD OPT "${_the_opts[@]}"; do
+    set -- "${_the_opts[@]}"
+    local __action__= __strucname__= __inherit__=
+    while getopts :c:d:i: OPT "${@}"; do
         case $OPT in
-            C) ACTION=create ;;
-            D) ACTION=delete ;;
+            c) __action__=create __structname__=${OPTARG} ;;
+            i) __inherit__=${OPTARG} ;;
+            d) __action__=delete __structname__=${OPTARG} ;;
         esac
     done
     shift $(( OPTIND - 1 ))
     OPTIND=1
 
-    local _struct_name_=${1}; shift
+    local _struct_name_=${__structname__}; shift
     is_word ${_struct_name_} || { _rtn=1 E="bad struct name '${_struct_name_}', may only contain letter, number and '_' characters"; error-f; }
-    local _struct_dir=${_rundir_}/${STRUCT_TYPEDIR}/${_struct_name_}
+    local _struct=${_structdefs_}/${_struct_name_}
 
-    case ${ACTION} in
+    case ${__action__} in
 
         create)
             # create the struct location
-            is_exist_dir ${_struct_dir} && { _rtn=1 E="struct '${_struct_name_}' already exists."; error-f; }
-            mkdir -p ${_struct_dir}
-            echo ${_struct_name_} >${_struct_dir}/.struct_type
+            [[ "${__inherit__}" ]] && {
+                is_exist_dir ${_structdefs_}/${__inherit__} && {
+                    local _inherited=${_structdefs_}/${__inherit__}
+                } || {
+                    _rtn=1 E="inherited struct '${__inherit__}' not found in ${_structdefs_}/."; error-f;
+                }
+                (
+                    cd ${_structdefs_}
+                    cp -r ${__inherit__} ${_struct_name_}
+                )
+            } || {
+                is_exist_dir ${_struct} && { _rtn=1 E="struct '${_struct}' already exists."; error-f; }
+                mkdir -p ${_struct}
+            }
+            echo ${_struct_name_} >${_struct}/.struct_type
 
             # create the struct layout
             (
-                cd ${_struct_dir}
+                cd ${_struct}
                 local p=
                 for p in "${@}"; do
                     # create a temporary array of ('type' 'name' 'validator') from each record spec parameter
-                    local -a _tnv=()
-                    readarry _tnv <(echo -en "${p//:/\\n}")
+                    local -a _tnv=( ${p//:/ } )
                     (( ${#_tnv[@]} > 1 )) && (( ${#_tnv[@]} < 4 )) || { _rtn=1 E="invalid record defnition: '${p}'"; error-f; }
                     is_word ${_tnv[1]} || { _rtn=1 E="bad record name '${_tnv[1]}', may only contain letter, number and '_' characters"; error-f; }
                     is_exist_dir ${_tnv[1]} && { _rtn=1 E="record '${_tnv[1]}' already exists."; error-f; }
-                    mkdir -p ${_struct_dir}/${_tnv[1]}
+                    mkdir -p ${_struct}/${_tnv[1]}
                     (
                         cd ${_tnv[1]}
                         echo "${_tnv[1]}" >${_tnv[1]}_name
@@ -106,11 +124,11 @@ function typedef()
                         case ${_tnv[0]} in
                             A)
                                 echo "associative_array" >${_tnv[1]}_type
-                                echo "is_hash" >${_tnv[1]}_validator
+                                echo "is_struct_hash" >${_tnv[1]}_validator
                                 ;;
                             a)
                                 echo "indexed_array" >${_tnv[1]}_type
-                                echo "is_array" >${_tnv[1]}_validator
+                                echo "is_struct_array" >${_tnv[1]}_validator
                                 ;;
                             b)
                                 echo "bool" >${_tnv[1]}_type
@@ -140,7 +158,7 @@ function typedef()
 
                         # if an optional custom validator function is assigned, add it to standard validator
                         (( ${#_tnv[@]} == 3 )) && {
-                            is_function ${_tnv[2]} || { _rtn=1 E="validator function '${_tnv[2]}' is not defined."; error-f; }
+                            is_function ${_tnv[2]} || { _rtn=1 E="validator function '${_tnv[2]}' for record '${_tnv[1]}' is not defined."; error-f; }
                             echo "${_tnv[2]}" >>${_tnv[1]}_validator
                         } || :
                     )
@@ -149,7 +167,7 @@ function typedef()
             ;;
 
         delete)
-            [[ -d ${_struct_dir} ]] && rm -rf ${_struct_dir}
+            [[ -d ${_struct} ]] && rm -rf ${_struct}
             ;;
     esac
 
@@ -177,6 +195,7 @@ function new()
 {
     local _params_="${@}"
     func-init
+    verify_argc $# 3 || { _rtn=1 E="${_err} ${FUNCNAME}: invalid argument count"; error-f; }
 
     local _obj_=${1}
     local _type_=${2}
@@ -189,13 +208,15 @@ function new()
             local _data_dir=${_rundir_}/${STRUCT_DATADIR}
 
             is_exist_dir ${_struct_dir}/${_type_} || { _rtn=1 E="struct typedef '${_type_}' does not exist."; error-f; }
-            is_exist_dir ${_data_dir}/${_name_} && { _rtn=1 E="struct instance '${_name_}' already exists."; error-f; }
+            is_exist_dir ${_data_dir}/${_name_} && {
+                _rtn=1 E="struct instance '${_name_}' already exists."; error-f;
+            } || {
+                mkdir -p ${_data_dir}/${_name_} || { _rtn=1 E="creating struct instance '${_name_}' failed."; error-f; }
+            }
 
             (
-                cd ${_struct_dir}
-                local tmpname=${RANDOM}-${RANDOM}-${RANDOM}
-                cp -r ${_type_} ${_data_dir}/${tmpname}
-                mv ${_data_dir}/${tmpname} ${_data_dir}/${_name_}
+                cd ${_struct_dir}/${_type_}
+                cp -r * ${_data_dir}/${_name_} || { _rtn=1 E="instantiating '${_name_}' failed."; error-f; }
             )
             ;;
         *)
@@ -208,12 +229,43 @@ function new()
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
-function _get()
-# Description: gets data from a struct node
+function _set()
+# Description: store data in a previously defined object with mulitple
+#              type vlaidation mechanisms.
 # Depends: bashlib,
 # API:
-#  $1 - name
-#  $@ - <regex>
+#  $1 - object type
+#  $2 - object name
+#  $3 - object record_id
+#  $@ - object record_id data
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  _set ${t} ${n} ${r} "${rd[@]}"
+#-
+{
+    local _params_="${@}"
+    func-init
+    verify_argc $# 4 || { _rtn=1 E="${_err} ${FUNCNAME}: invalid argument count"; error-f; }
+
+    # function body
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function _get()
+# Description: retrieve data from an existing object
+# Depends: bashlib,
+# API:
+#  $1 - object type
+#  $2 - object name
+#  $3 - object record_id|<regex>
 # Inputs:
 # Outputs:
 # Environment:
@@ -226,32 +278,7 @@ function _get()
 {
     local _params_="${@}"
     func-init
-
-    # function body
-
-    func-return
-}
-##------------------------------------------------------------------------------
-
-#-------------------------------------------------------------------------------
-function _set()
-# Description: set data into a struct node
-# Depends: bashlib,
-# API:
-#  $1 - name
-#  $@ - key 'value'
-# Inputs:
-# Outputs:
-# Environment:
-# Returns:
-#  0 on success
-#  1 on failure
-# Examples:
-#  _put ${n} ${k} ${v}
-#-
-{
-    local _params_="${@}"
-    func-init
+    verify_argc $# 2 3 || { _rtn=1 E="${_err} ${FUNCNAME}: invalid argument count"; error-f; }
 
     # function body
 

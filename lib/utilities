@@ -361,7 +361,12 @@ function gen_regex_string()
 #    '^one$|^two$|^three$'
 #-
 {
+    local _params_="${@}"
+    minimal-func-init
+
     echo "^$(echo "${*}" | sed 's/ /$|^/g')$"
+
+    minimal-func-return
 }
 ##------------------------------------------------------------------------------
 
@@ -491,7 +496,7 @@ function convert_long_options()
 #-
 {
     local _params_="${@}"
-    func-init
+    minimal-func-init
 
     local _a=
     for _a in _l _s; do local -a ${_a}; eval "${_a}=( $(evar "${1}[@]") )"; shift; done
@@ -506,7 +511,7 @@ function convert_long_options()
 
     printf %s'\n' ${_o}
 
-    func-return
+    minimal-func-return
 }
 ##------------------------------------------------------------------------------
 
@@ -2078,7 +2083,7 @@ function is_word()
 #  1 on failure
 #-
 {
-    [[ ${1} =~ ^[[:word:]]+$ ]]
+    [[ "${1}" =~ ^[_[:alnum:]]+$ ]]
 }
 ##------------------------------------------------------------------------------
 

@@ -556,7 +556,7 @@ function log_debug_init()
     echo ${COPROC_PID} >${_rundir_}/debug_filter_coproc.pid
 
     # tell the coproc to source it's configuration
-    signal sighup ${COPROC_PID}
+    #signal sighup ${COPROC_PID}
 
     # close fd4 as coproc stdout (it's redirecting to a file now).
     exec 4>&-
@@ -621,6 +621,7 @@ function log_debug_noise_filter()
     coproc-func-init
 
     local _drop_regex_="${1}"
+    local _sourcec_env_fn=${2}
 
     {
         local _line=
@@ -660,7 +661,7 @@ function log_debug_section_header()
 #-
 {
     (( $1 > 0 )) && local _way="Exiting" || local _way="Entering"
-    log_fd ${BASH_XTRACEFD} "$(log_banner centered "$(date +'%b %d %s.%N') ${_way} '${FUNCNAME[${2}]}${iid:+"[${iid}]"}()' function body")"
+    log_fd ${BASH_XTRACEFD:-2} "$(log_banner centered "$(date +'%b %d %s.%N') ${_way} '${FUNCNAME[${2}]}${iid:+"[${iid}]"}()' function body")"
 }
 ##------------------------------------------------------------------------------
 

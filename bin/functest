@@ -105,8 +105,10 @@ case "${1}" in
     -D|--debug)   _DEBUG_=true;   shift ;;
 esac
 
+_params_="${@}"
+
 # initialize logging, debug, and program subsystems
-log_init; log_debug_init; _params="${@}"; prog-init
+session-init; log_init; log_debug_init; prog-init
 
 # builtin help
 show_help "${@}"
@@ -129,10 +131,10 @@ function __main__()
 #  0 on success
 #  1 on failure
 # Examples:
-#   main "${@}"
+#   __main__ "${@}"
 #-
 {
-    local _params="${@}"
+    local _params_="${@}"
     func-init
 
     case ${1} in
