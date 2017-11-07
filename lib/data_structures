@@ -15,7 +15,7 @@ function typedef()
 # Description: creates/deletes a structured data record type definition
 # Depends: bashlib,
 # API:
-# switches: <-c|--create type_name> [-i|--inherit struct]  <record_type:record_name[:validator_funcname]> ...
+# switches: <-c|--create type_name> [-i|--inherit existing_type_name]  <record_type:record_name[:validator_funcname]> ...
 #           <-d|--delete type_name>
 #     $1 - type name
 #     $@ - record <type>:<name>[:validator] list, where: (in create mode only)
@@ -23,19 +23,20 @@ function typedef()
 #            'A' for associative_array
 #            'a' for indexed_array
 #            'b' for boolean
-#            'f' for float number
+#            'f' for floating point number
 #            'h' for hex number
 #            'i' for integer number
 #            's' for string
-#     and <name> is an [[:word:]]+ name for the record.
+#     and <name> is an [_[:alnum:]]+ conformant name for the record.
 #
-#     if [:validator] is present, making the parameter a colon
-#     separated triplet, then 'validator' is the name of an existing
-#     function that will be used to validate the information when it
-#     is assigned to 'name' with:
+#     if [:validator] is present, which is an [_[:alnum:]]+ conformant
+#     name, making the parameter a colon separated triplet, then
+#     'validator' is the name of an existing function that will be
+#     used to validate the information when it is assigned to 'name'
+#     with:
 #
-#      '_set struct <name> <recname> <value>' for type=[bfhis], or
-#      '_set struct <name> <recname> <<index|+>|key> <value>' for [Aa] types.
+#      '_set struct <structure_name> <record_name> <value>' for type=[bfhis], or
+#      '_set struct <structure_name> <record_name> <<index|+>|key> <value>' for [Aa] types.
 #
 #     'validator' functions must take <value> as their only parameter and
 #     return true or false only, with no output.
@@ -54,11 +55,11 @@ function typedef()
 #  this creates a struct 'template', saving it to:
 #    ${_structdir_}/${_struct_name_}
 #    or, in plain English, something like:
-#    /run/user/$USER/my_script_name/26674360-fbdb-4f2f-83cd-73779a67c4b0/struct/type/hotel_room
+#    /run/user/$USER/my_script_name/26674360-fbdb-4f2f-83cd-73779a67c4b0/typedefs/type/hotel_room
 #    putting the data in the tmpfs filesystem for better performance.
 #
 #  the 'new()' function, defined elsewhere in this file, creates
-#  instances of data structures defined with 'struct()'.
+#  instances of data structures defined with 'typedef()'.
 #
 #-
 {
@@ -71,18 +72,18 @@ function typedef()
     local -a _the_opts=( $(convert_long_options _lo _so "${_params_}") )
 
     set -- "${_the_opts[@]}"
-    local __action__= __strucname__= __inherit__=
     while getopts :c:d:i: OPT "${@}"; do
         case $OPT in
-            c) __action__=create __structname__=${OPTARG} ;;
-            i) __inherit__=${OPTARG} ;;
-            d) __action__=delete __structname__=${OPTARG} ;;
+            c) local __action__=create __structname__=${OPTARG} ;;
+            i) local __inherit__=${OPTARG} ;;
+            d) local __action__=delete __structname__=${OPTARG} ;;
         esac
     done
     shift $(( OPTIND - 1 ))
     OPTIND=1
 
     local _struct_name_=${__structname__}; shift
+
     is_word ${_struct_name_} || { _rtn=1 E="bad struct name '${_struct_name_}', may only contain letter, number and '_' characters"; error-f; }
     local _struct=${_structdefs_}/${_struct_name_}
 
