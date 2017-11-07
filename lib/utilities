@@ -247,7 +247,6 @@ function quote()
 #-
 {
     local _params_="${@}"
-    func-init
 
     local _type_=
     local _str_=
@@ -273,7 +272,6 @@ function quote()
         echo "${_type_}${_str_}${_type_}"
     }
 
-    func-return
 }
 ##------------------------------------------------------------------------------
 
@@ -1313,8 +1311,6 @@ function gen_uuid()
 #  1 on failure
 #-
 {
-    local _params_="${@}"
-
     [[ $(which uuidgen) ]] && {
         uuidgen
      } || {
@@ -1341,15 +1337,9 @@ function signal()
 #
 #-
 {
-    local _params_="${@}"
-    minimal-func-init
-
     local _sig=${1:-term}
     local _pid=${2}
-
     try kill -${_sig} ${_pid}
-
-    minimal-func-return
 }
 ##------------------------------------------------------------------------------
 
