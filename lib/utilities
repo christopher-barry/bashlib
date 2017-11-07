@@ -232,6 +232,52 @@ function trim()
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
+function quote()
+# Description: wrap parameter in quotes
+# Depends: bashlib
+# API:
+#  $1 - quote type: -s|--single or -d|--double
+#  [$*] - string to quote, or stdin
+# Examples:
+#  echo "string" | quote -s
+#  quote --double ${var}
+# Returns:
+#  0 on success
+#  1 on failure
+#-
+{
+    local _params_="${@}"
+    func-init
+
+    local _type_=
+    local _str_=
+
+    case "${1}" in
+        --single | -s )
+            shift
+            local _type_=\'
+            ;;
+        --double | -d )
+            shift
+            local _type_=\"
+            ;;
+        * )
+            _rtn=1 E="bad quote type parameter"
+            error-f
+            ;;
+    esac
+
+    _str_="${*:-$(get_stdin)}"
+
+    [[ "${_str_}" ]] && {
+        echo "${_type_}${_str_}${_type_}"
+    }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
 function range()
 # Description: output range of fields, using zeroth-based indexing.
 # Depends: bashlib tr
@@ -362,11 +408,9 @@ function gen_regex_string()
 #-
 {
     local _params_="${@}"
-    minimal-func-init
 
     echo "^$(echo "${*}" | sed 's/ /$|^/g')$"
 
-    minimal-func-return
 }
 ##------------------------------------------------------------------------------
 
@@ -1270,7 +1314,6 @@ function gen_uuid()
 #-
 {
     local _params_="${@}"
-    func-init
 
     [[ $(which uuidgen) ]] && {
         uuidgen
@@ -1278,8 +1321,6 @@ function gen_uuid()
         log_fd 2 "Error: uuidgen missing. please install"
         echo "${RANDOM}${RANDOM}${RANDOM}-not-a-uuid-please-install-uuidgen-${RANDOM}"
     }
-
-    func-return
 }
 ##------------------------------------------------------------------------------
 
