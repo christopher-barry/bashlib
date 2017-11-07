@@ -65,7 +65,7 @@ function log()
 # Depends: bashlib stdbuf logger
 #  Soft dependency on 'logger'. Will notice but use builtin routine if
 #  it's not installed. logger is required to log to syslog.
-# Global Variables: Defaults set base.cfg, override as required.
+# Global Variables: Defaults set in base.cfg, override as required.
 #   ${_VERBOSE_}  - Output to console as well as log.
 #   ${_DEBUG_}    - Set priority to 'debug', overriding any previous setting.
 #   ${USE_SYSLOG} - true|false.
@@ -530,7 +530,6 @@ function log_debug_init()
 #  log_debug_init
 #-
 {
-#    set -x
     [[ ${_DEBUG_^^} =~ TRUE|YES|ON|1 ]] || return 0
 
     # debug implies verbose too
@@ -543,22 +542,19 @@ function log_debug_init()
     # resolve regex array into a filter string file. this file is
     # sourced into the coproc on sighup so the filter can be updated
     # on the fly
-    debug_regex_filter_file=${_rundir_}/debug_filter.regex
-    echo -n "_drop_regex_="  >${debug_regex_filter_file}
-    gen_regex_string "${DEBUG_DROP_LINES[@]}" | quote --double >>${debug_regex_filter_file}
+    declare -gx DEBUG_FILTER_REGEX_FILE=${_rundir_}/debug_filter.regex
+    echo -n "_drop_regex_="  >${DEBUG_FILTER_REGEX_FILE}
+    gen_regex_string "${DEBUG_DROP_LINES[@]}" | quote --double >>${DEBUG_FILTER_REGEX_FILE}
 
     # put debug log file on fd4.
     exec 4>${DEBUG_FN}
 
     # create setx filtering co-process with it's standard output redirected to the debug log.
-    coproc log_debug_noise_filter "${debug_regex_filter_file}" 1>&4
+    coproc log_debug_noise_filter "${DEBUG_FILTER_REGEX_FILE}" 1>&4
 
     # filter pid
     declare -gx DEBUG_FILTER_PID=${_rundir_}/debug_filter_coproc.pid
     echo ${COPROC_PID} >${DEBUG_FILTER_PID}
-
-    # tell the coproc to source it's configuration
-    signal sighup $(<${DEBUG_FILTER_PID})
 
     # close fd4 as coproc stdout (it's redirecting to a file now).
     exec 4>&-
@@ -585,12 +581,15 @@ function log_debug_init()
     # log_fd writes to a specific file descriptor ('4' in this case)
     log_fd 4 "$(log_banner centered "$(date +'%b %d %T') Debugging: ${0}")"
 
-    log_fd 4 "$(log_center \# ${LB_COLS:-80} "Debugging is OFF for functions set in DEBUG_EXCLUDES[@]")"
-    log_fd 4 "$(log_center \# ${LB_COLS:-80} "Add/remove names from DEBUG_EXCLUDES[@] in base.cfg to modify")"
+    log_fd 4 "$(log_center \= 82 "Debugging is OFF for functions set in DEBUG_EXCLUDES[@]")"
+    log_fd 4 "$(log_center \= 82 "Add/remove names from DEBUG_EXCLUDES[@] in base.cfg to modify")"
 
-    log_fd 4 "$(log_center \# ${LB_COLS:-80} "Debug output is SILENCED for regexes set in DEBUG_DROP_LINES[@]")"
-    log_fd 4 "$(log_center \# ${LB_COLS:-80} "Add/remove regexes from DEBUG_DROP_LINES[@] in base.cfg to modify")"
+    log_fd 4 "$(log_center \= 82 "Debug output is SILENCED for regexes set in DEBUG_DROP_LINES[@]")"
+    log_fd 4 "$(log_center \= 82 "Add/remove regexes from DEBUG_DROP_LINES[@] in base.cfg to modify")"
     log_fd 4 " "
+
+    # tell the coproc to source it's configuration
+    signal sighup $(<${DEBUG_FILTER_PID})
 
     # Uncomment these to dump tons more stuff. I didn't
     # find the extra data all that helpful, but YMMV.
@@ -607,8 +606,7 @@ function log_debug_noise_filter()
 # Description: body of a filtering coprocess to reduce debug noise
 # Depends: bashlib stdbuf
 # API:
-#  $1 - configured rexex pattern string to remove from io stream
-#  $2 - a sourceable file of regex patterns to remove from stream
+#  $1 - a sourceable file of regex patterns to remove from stream
 #  sighup - forces a reload of the regular expression string
 # Inputs: raw xtrace output, sighup to reload regexes
 # Outputs: regex filtered xtrace output
@@ -620,10 +618,13 @@ function log_debug_noise_filter()
 #-
 {
     local _params_="${@}"
-    coproc-func-init
+    minimal-func-init
 
-    trap 'kill -9 ${_bg_loop_pid}' TERM
-    trap 'source ${_source_env_fn}; echo "sighup signal received"' HUP
+    trap '{ source ${_source_env_fn};
+            echo -e "\nsighup signal received in debug log filtering coproc";
+            echo "sourcing new regex filter:";
+            echo "$(<${_source_env_fn})";
+            echo ""; }' HUP
 
     local _source_env_fn="${1}"
     source ${_source_env_fn}
@@ -632,13 +633,45 @@ function log_debug_noise_filter()
         while read _line
         do
 
-            [[ "${_line}" =~ "${_drop_regex_}" ]] || {
+            [[ "${_line}" =~ ${_drop_regex_} ]] || {
                 echo "${_line}"
             }
 
         done < <(stdbuf -i0 -o0 -e0 cat -)
 
-    #coproc-func-return
+    minimal-func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function log_update_debug_filter_regex()
+# Description: change and instantiate a new filter in the debug filter coproc
+# Depends: bashlib
+# API:
+#  $1 - new regex pattern string(s) to remove from io stream
+#  sighup - forces a reload of the regular expression string
+# Inputs: regex pattern string
+# Outputs: writes pattern to sourced file
+# Env: DEBUG_FILTER_REGEX_FILE and DEBUG_FILTER_PID set in log_debug_init()
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  internal use. See log_debug_init for coproc implementation details
+#-
+{
+    local _params_="${@}"
+    minimal-func-init
+
+    local _pattern_="${_params_}"
+
+    echo -n "_drop_regex_="  >${DEBUG_FILTER_REGEX_FILE}
+    gen_regex_string "${_pattern_}" | quote --double >>${DEBUG_FILTER_REGEX_FILE}
+
+    # tell the coproc to source it's updated configuration
+    signal sighup $(<${DEBUG_FILTER_PID})
+
+    minimal-func-return
 }
 ##------------------------------------------------------------------------------
 
@@ -658,7 +691,7 @@ function log_debug_section_header()
 #  internal use
 #-
 {
-    (( $1 > 0 )) && local _way="Exiting" || local _way="Entering"
+    (( $1 )) && local _way="Exiting" || local _way="Entering"
     log_fd ${BASH_XTRACEFD:-2} "$(log_banner centered "$(date +'%b %d %s.%N') ${_way} '${FUNCNAME[${2}]}${iid:+"[${iid}]"}()' function body")"
 }
 ##------------------------------------------------------------------------------
