@@ -530,6 +530,7 @@ function log_debug_init()
 #  log_debug_init
 #-
 {
+#    set -x
     [[ ${_DEBUG_^^} =~ TRUE|YES|ON|1 ]] || return 0
 
     # debug implies verbose too
@@ -539,24 +540,25 @@ function log_debug_init()
     [[ ${DEBUG_FN} ]] || DEBUG_FN="${LOG_DIR:-${HOME}/log}/$(basename ${SOURCE[0]:-${0}}).debug"
     mkdir -p $(dirname ${DEBUG_FN}) || { log_fd 2 "ERROR: cannot write debug log data to: ${DEBUG_FN}"; exit 1; }
 
-    # resolve regex array into a filter string file
-    # this file is sourced into the coproc on sighup
-    # so the filter can be updated on the fly
+    # resolve regex array into a filter string file. this file is
+    # sourced into the coproc on sighup so the filter can be updated
+    # on the fly
     debug_regex_filter_file=${_rundir_}/debug_filter.regex
-    echo _drop_regex_=\'"$(gen_regex_string "${DEBUG_DROP_LINES[@]}")"\' >${debug_regex_filter_file}
-    local $(<"${debug_regex_filter_file}")
+    echo -n "_drop_regex_="  >${debug_regex_filter_file}
+    gen_regex_string "${DEBUG_DROP_LINES[@]}" | quote --double >>${debug_regex_filter_file}
 
     # put debug log file on fd4.
     exec 4>${DEBUG_FN}
 
     # create setx filtering co-process with it's standard output redirected to the debug log.
-    coproc log_debug_noise_filter "${_drop_regex_}" "${debug_regex_filter_file}" 1>&4
+    coproc log_debug_noise_filter "${debug_regex_filter_file}" 1>&4
 
     # filter pid
-    echo ${COPROC_PID} >${_rundir_}/debug_filter_coproc.pid
+    declare -gx DEBUG_FILTER_PID=${_rundir_}/debug_filter_coproc.pid
+    echo ${COPROC_PID} >${DEBUG_FILTER_PID}
 
     # tell the coproc to source it's configuration
-    #signal sighup ${COPROC_PID}
+    signal sighup $(<${DEBUG_FILTER_PID})
 
     # close fd4 as coproc stdout (it's redirecting to a file now).
     exec 4>&-
@@ -620,27 +622,23 @@ function log_debug_noise_filter()
     local _params_="${@}"
     coproc-func-init
 
-    local _drop_regex_="${1}"
-    local _sourcec_env_fn=${2}
+    trap 'kill -9 ${_bg_loop_pid}' TERM
+    trap 'source ${_source_env_fn}; echo "sighup signal received"' HUP
 
-    {
+    local _source_env_fn="${1}"
+    source ${_source_env_fn}
+
         local _line=
-        while read -t ${LOG_WAIT:-5} _line
+        while read _line
         do
-            # allow reloading
-            trap "source ${_source_env_fn}" USR1
 
-            [[ "${_line}" =~ ${_drop_regex_} ]] || {
+            [[ "${_line}" =~ "${_drop_regex_}" ]] || {
                 echo "${_line}"
             }
+
         done < <(stdbuf -i0 -o0 -e0 cat -)
-    } &
 
-    local _bg_loop_pid=$!
-
-    wait ${_bg_loop_pid}
-
-    coproc-func-return
+    #coproc-func-return
 }
 ##------------------------------------------------------------------------------
 
