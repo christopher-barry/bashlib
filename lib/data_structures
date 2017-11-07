@@ -82,7 +82,7 @@ function typedef()
     shift $(( OPTIND - 1 ))
     OPTIND=1
 
-    local _struct_name_=${__structname__}; shift
+    local _struct_name_=${__structname__}
 
     is_word ${_struct_name_} || { _rtn=1 E="bad struct name '${_struct_name_}', may only contain letter, number and '_' characters"; error-f; }
     local _struct=${_structdefs_}/${_struct_name_}
