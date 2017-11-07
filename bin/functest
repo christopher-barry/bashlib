@@ -95,6 +95,7 @@ import logging
 import utilities
 # additional bashlib includes.
 # uncomment them to activate.
+import data_structures
 import remote
 import net
 import math
@@ -105,13 +106,11 @@ case "${1}" in
     -D|--debug)   _DEBUG_=true;   shift ;;
 esac
 
-_params_="${@}"
-
-# initialize logging, debug, and program subsystems
-session-init; log_init; log_debug_init; prog-init
+# initialize session, logging, debug, and program subsystems
+session-init; log_init; log_debug_init; _params_="${@}"; prog-init
 
 # builtin help
-show_help "${@}"
+show_help "${_params_}"
 
 ################################################################################
 #               P  R  O  G  R  A  M     B  E  G  I  N  S                       #
