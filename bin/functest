@@ -140,16 +140,16 @@ function __main__()
         -e)
             shift
             try --eval "${@}"
-            _rtn=$(get_status)
+            _rtn=$?
             ;;
         -t)
             shift
             try "${@}"
-            _rtn=$(get_status)
+            _rtn=$?
             ;;
         *)
             ${@}
-            _rtn=$(get_status)
+            _rtn=$?
             ;;
     esac
 
@@ -157,8 +157,8 @@ function __main__()
 }
 ##------------------------------------------------------------------------------
 
-# dump everything
-DEBUG_DROP_LINES=
+# dump everything through logging filter for testing purposes
+log_update_debug_filter_regex "DUMP_ALL_INFORMATION"
 
 # source file if needed
 [[ "${1}" == "-i" ]] && {
