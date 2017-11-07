@@ -183,8 +183,8 @@ case "${1}" in
     -D|--debug)   _DEBUG_=true;   shift ;;
 esac
 
-# initialize logging, debug, and program subsystems
-log_init; log_debug_init; _params_="${@}"; prog-init
+# initialize session, logging, debug, and program subsystems
+session-init; log_init; log_debug_init; _params_="${@}"; prog-init
 
 # builtin help functionality
 show_help "${@}"
