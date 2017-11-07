@@ -31,7 +31,7 @@
 shopt -s expand_aliases
 
 
-## BEGIN MACRO DEFINITIONS ##
+: BEGIN MACRO DEFINITIONS
 
 #---[ d e b u g ]-------------------------------------------------------
 
@@ -89,7 +89,7 @@ alias this-info='this-name; this-source; this-line-number; this-invoked'
 
 #---[ i n i t ]---------------------------------------------------------
 
-alias _-init-_=
+#alias _-init-_=
 
 
 #---[ s e s s i o n ]---------------------------------------------------
@@ -116,13 +116,13 @@ alias this-rundir-init='mkdir -p ${_rundir_}'
 # stored application data persistent across reboots), set WITH_RUNDIR
 # to a non-volatile storage location. e.g.:
 #
-#   export WITH_RUNDIR=/${HOME}/data
+#   export WITH_RUNDIR=${HOME}/data
 #
 # the location must be writable by the user running the application.
 #
 alias this-rundir='_rundir_=${WITH_RUNDIR:-/run/user}/$(id -u)/${_self_}/${_session_}'
 
-alias this-struct-root='_structdir__=${_rundir_}/struct'
+alias this-struct-root='_structdir_=${_rundir_}/struct'
 
 alias this-struct-typedefs='_structdefs_=${_structdir_}/typedefs'
 
@@ -186,8 +186,8 @@ alias value-func-return='get-return-status; minimal-func-return; return ${_rtn}'
 
 #---[ c o p r o c e s s   f u n c t i o n ]-----------------------------
 
-# special case init header for coproc function: minimal, plus allows reloading an environemnt file on sighup
-alias coproc-func-init='minimal-func-init; local _source_env_fn=$(echo ${_params_} | awk -F[[:blank:]] "{ print \$2 }"); trap "signal USR1 \${_bg_loop_pid}" HUP'
+# special case init header for coproc function: minimal, plus allows deleting an environemnt file on exit
+alias coproc-func-init='minimal-func-init;'
 
 # special case return footer for coproc functions: minimal plus clean up temp env files
 alias coproc-func-return='[[ -f ${_source_env_fn} ]] && rm -f --preserve-root ${_source_env_fn}; minimal-func-return'
@@ -232,15 +232,15 @@ alias get-env-regular-names='declare -p | awk -F= "{ print \$1 }" | grep "^decla
 # generate an array of all set local variables
 alias get-env-local='readarray _${FUNCNAME}_env < <(local|grep -v '^E=.*$')'
 
-## END MACRO DEFINITIONS ##
+: END MACRO DEFINITIONS
 
 
 # on every load of this file, automatically create an up-to-date array
 # of all the alias names defined in this file, so they can be
 # destroyed on the way out.
 # this code must be after all the alias definitions
-begin='begin macro'
-end='end macro'
+begin='begin macro defininitions'
+end='end macro defininitions'
 while read line; do
     [[ "${line}" =~ ${begin^^} ]] && state=start
     [[ "${line}" =~ ${end^^} ]]   && state=stop
@@ -257,7 +257,7 @@ while read line; do
             break
             ;;
     esac
-done < <( cat $(ipath macros) )
+done < <( egrep -v '^\#.*$|^$' $(ipath macros) )
 
 begin= end= state= line=
 
