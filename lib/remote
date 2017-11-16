@@ -63,6 +63,7 @@ function expand_symbol_names()
 {
     local _params_="${@}"
     func-init
+
     local _type_=${1}; shift
     local -a _found_names=()
     local -i n=
