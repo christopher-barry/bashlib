@@ -124,17 +124,29 @@ function test_structure_functions()
     log "retrieving records..."
     _structure=teststruct
     retrieve-records
+    sleep 2
 
     # show what the state is
     log "show records..."
-    typeset -p | grep 'teststruct.*$'
+    typeset -p | grep 'declare\ .*\ teststruct.*$'
+    sleep 2
 
     # modify the values in the local environment
     log "modify records..."
     while read d t k; do
         case ${t} in
-            *A*) declare -A ${k}[NEW_KEY]="new hash value" ;;
-            *a*) declare -a ${k}+="new_array_value" ;;
+            *A*)
+                for x in {0..4}; do
+                    declare -A ${k}[NEW_KEY_$x]="new hash value $x"
+                done
+                ;;
+            *a*)
+                x=$(evar "#${k}[@]")
+                for y in {0..4}; do
+                    z=$(($x+$y))
+                    declare -a ${k}[$z]="new_array_value $z"
+                done
+                ;;
             *i*) declare -i ${k}=10 ;;
         esac
         case ${k} in
@@ -142,35 +154,42 @@ function test_structure_functions()
             *bool)  declare ${k}=yes ;;
             *string) declare ${k}="Hello World" ;;
         esac
-    done < <(typeset -p | grep teststruct_ | awk -F= '{print $1}')
+    done < <(typeset -p | grep 'declare\ .*\ teststruct_.*' | awk -F= '{print $1}')
+    sleep 2
 
     # show the local environment
     log "show records..."
-    typeset -p | grep 'teststruct.*$'
+    typeset -p | grep 'declare\ .*\ teststruct.*$'
+    sleep 2
 
     # store the local environment of the structure back to disk
     log "store records..."
     _test_store_structure || { _rtn=$?; error-f; }
+    sleep 2
 
     # unset the environment
     log "delete in-memory records..."
     while read d t k; do
         log "unsetting ${k}"
         unset ${k}
-    done < <(typeset -p | grep teststruct_ | awk -F= '{print $1}')
+    done < <(typeset -p | grep 'declare\ .*\ teststruct_.*' | awk -F= '{print $1}')
+    sleep 2
 
     # show it's unset
     log "show records..."
-    typeset -p | grep 'teststruct.*$'
+    typeset -p | grep 'declare\ .*\ teststruct.*$'
+    sleep 2
 
     # pull the updated structure
     log "retrieving records..."
     _structure=teststruct
     retrieve-records
+    sleep 2
 
     # show it's in the local environment
     log "show records..."
-    typeset -p | grep 'teststruct.*$'
+    typeset -p | grep 'declare\ .*\ teststruct.*$'
+    sleep 2
 
     # test query functionality
     # _test_objquery || { rtn=$?; error-f; }
@@ -178,5 +197,3 @@ function test_structure_functions()
     func-return
 }
 ##------------------------------------------------------------------------------
-
-test_structure_functions || { _rtn=$?; error-f; }
