@@ -14,11 +14,12 @@
 #-------------------------------------------------------------------------------
 function typedef()
 # Description: creates/deletes a structured data type-definition
-# Depends: bashlib,
+# Depends: bashlib
 # API:
 # switches: <-c|--create type_name> [-i|--inherit existing_type_name]  <record_type:record_name[:validator_funcname]> ...
 #           <-d|--delete type_name>
-#     $1 - type name
+#     -c type name
+#     [-i existing-type to inherit]
 #     $@ - record <type>:<name>[:validator] list, where: (in create mode only)
 #         <type> is one of:
 #            'A' for associative_array
@@ -30,16 +31,23 @@ function typedef()
 #            's' for string
 #     and <name> is an [_[:alnum:]]+ conformant name for the record.
 #
-#  if [:validator] is present, which is an [_[:alnum:]]+ conformant
-#  name, making the parameter a colon separated triplet, then
-#  'validator' is the name of an existing function that will be used
-#  to validate the information when it is assigned to 'name' with:
+#  if [:validator] is present, which must be an [_[:alnum:]]+
+#  conformant name, making the parameter a colon separated triplet,
+#  then 'validator' is the name of an existing function that will be
+#  used to validate the information when it is assigned to 'name'
+#  with:
 #
-#      'store --objtype struct --name mystruct --rectype i --record myint'
+#      'store_record --objtype struct --name mystruct --rectype i --record myint'
+#  or:
+#      'store_structure --objtype struct --name mystruct'
 #
 #  'validator' functions must take ${name}_${record} as their only
 #  parameter, and return true or false only, with no output. data is
-#  only validated on actual storage in structure.
+#  only validated on actual storage into structure. By default, each
+#  standard type of data is validated by it's 'is_<type>' function,
+#  found in lib/utilities, such as 'is_array()', or 'is_hex()'. the
+#  custom validators added as one of the above parameters is to do
+#  additional, program-specific validation.
 #
 # Inputs:
 # Outputs:
@@ -50,16 +58,21 @@ function typedef()
 #  1 on failure
 # Examples:
 #  define a type of structure:
-#   typedef --create hotel_room i:rmnum:valid_rmnum \
-#               s:telnum:valid_telnum a:bednum:valid_bednum \
-#               A:beds:valid_beds b:occupied A:occupant:valid_occupant
-#  this creates a struct 'template', saving it to:
-#    ${_structdir_}/${_struct_name_}
-#    or, in plain English, something like:
-#    /run/user/$UID/my_script_name/26674360-fbdb-4f2f-83cd-73779a67c4b0/typedefs/type/hotel_room
-#    putting the data in the tmpfs filesystem for better performance.
 #
-#  the 'new()' function, defined elsewhere in this file, creates
+#      'typedef --create hotel_room i:rmnum:valid_rmnum s:telnum:valid_telnum a:bednum:valid_bednum \
+#                                   A:beds:valid_beds b:occupied A:occupant:valid_occupant'
+#
+#  this creates a struct 'template', saving it to:
+#
+#      ${_structdir_}/${_struct_name_}
+#
+#  or, in plain English, something like:
+#
+#      /run/user/${uid}/my_script_name/${_session_}/typedefs/hotel_room
+#
+#  the data is stored in a tmpfs filesystem for better performance by default.
+#
+#  the 'new()' function, defined elsewhere in this file, creates named
 #  instances of data structures defined with 'typedef()'.
 #
 #-
@@ -92,7 +105,10 @@ function typedef()
 
     local _struct_name_=${__structname__}
 
-    is_word ${_struct_name_} || { _rtn=1 E="bad struct name '${_struct_name_}', may only contain letter, number and '_' characters"; error-f; }
+    is_word ${_struct_name_} || {
+        _rtn=1 E="bad struct name '${_struct_name_}', may only contain letter, number and '_' characters"
+        error-f
+    }
 
     local _struct=${_structdefs_}/${_struct_name_}
 
@@ -100,7 +116,6 @@ function typedef()
 
         create)
 
-            # create the struct location
             [[ "${__inherit__}" ]] && {
 
                 is_exist_dir ${_structdefs_}/${__inherit__} && {
@@ -114,6 +129,7 @@ function typedef()
                 }
 
                 (
+                    # initialize new structure with inherited records
                     cd ${_structdefs_}
                     cp -r ${__inherit__} ${_struct_name_}
                 )
@@ -125,7 +141,8 @@ function typedef()
 
             }
 
-            # save the parent's name so instances can know
+            # save the parent's name so instances can know what type
+            # they were derived from
             echo ${_struct_name_} >${_struct}/.struct_type
 
             # create the struct layout
@@ -230,7 +247,7 @@ function typedef()
 #-------------------------------------------------------------------------------
 function new()
 # Description: instantiates a new instance of an object
-# Depends: bashlib,
+# Depends: bashlib
 # API:
 #  <-o|--objtype> <object_type> (currently only 'struct' is supported)
 #  <-p|--parent> <object_parent_def>
@@ -289,7 +306,11 @@ function new()
 
             # create the new structure from the parent
             pushd ${_structdefs_} &>/dev/null
-            rsync -qa ${__parent__}/ ${_structdata_}/${__name__}/ || { popd  2>/dev/null; _rtn=1 E="instantiating '${__name__}' failed."; error-f; }
+            rsync -qa ${__parent__}/ ${_structdata_}/${__name__}/ || {
+                popd  &>/dev/null
+                _rtn=1 E="instantiating '${__name__}' failed."
+                error-f
+            }
             popd  &>/dev/null
 
             # init each record's value to it's type-specific empty value
@@ -301,9 +322,9 @@ function new()
 
                 local -a _types=($(<${_record}/${_record}_type))
 
-                [[ ${_types[0]} =~ [A] ]] && echo declare -A ${__name__}_${_record}='()'   >${_record}/${_record}_value
+                [[ ${_types[0]} =~ [A] ]] && echo declare -A ${__name__}_${_record}='()' >${_record}/${_record}_value
 
-                [[ ${_types[0]} =~ [a] ]] && echo declare -a ${__name__}_${_record}='()'   >${_record}/${_record}_value
+                [[ ${_types[0]} =~ [a] ]] && echo declare -a ${__name__}_${_record}='()' >${_record}/${_record}_value
 
                 [[ ${_types[0]} =~ [b] ]] && echo declare ${__name__}_${_record}=false   >${_record}/${_record}_value
 
@@ -313,7 +334,7 @@ function new()
 
                 [[ ${_types[0]} =~ [i] ]] && echo declare -i ${__name__}_${_record}=0    >${_record}/${_record}_value
 
-                [[ ${_types[0]} =~ [s] ]] && echo declare ${__name__}_${_record}=      >${_record}/${_record}_value
+                [[ ${_types[0]} =~ [s] ]] && echo declare ${__name__}_${_record}=        >${_record}/${_record}_value
 
             done
             popd &>/dev/null
@@ -333,8 +354,10 @@ function new()
 
 #-------------------------------------------------------------------------------
 function store_structure()
-# Description: store all data in a previously defined strucure
-# Depends: bashlib,
+# Description: store all in-memory structure record data in a
+#              previously defined structure. this will synchronize the
+#              structure with the in-memory record state.
+# Depends: bashlib
 # API:
 #  <-o|--objtype> <object_type> (currently only 'struct' is supported)
 #  <-n|--name> <object_name>
@@ -402,9 +425,11 @@ function store_structure()
 
 #-------------------------------------------------------------------------------
 function store_record()
-# Description: store data in a previously defined object with multiple
-#              type vlaidation mechanisms.
-# Depends: bashlib,
+# Description: store data for a single record from the in-memory
+#              representation to the previously defined
+#              structure. allow multiple type vlaidation mechanisms
+#              that were defined with typedef.
+# Depends: bashlib
 # API:
 #  <-o|--objtype> <object_type> (currently only 'struct' is supported)
 #  <-n|--name> <object_name>
@@ -417,7 +442,7 @@ function store_record()
 #  0 on success
 #  1 on failure
 # Examples:
-#  store -o ${o} -n ${n} -t ${t} -r "${r}"
+#  store_record -o ${o} -n ${n} -t ${t} -r "${r}"
 #-
 {
     local _params_="${@}"
@@ -470,11 +495,10 @@ function store_record()
 #-------------------------------------------------------------------------------
 function _dehydrate()
 # Description: save a symbol's definition to file in a form that can
-#              be easily restored later with macros 'retrieve-local'
-#              and 'retrieve-global'. see macro lib for usage.
-#
+#              be easily restored later with macro 'retrieve-records'.
+#              see macro lib for usage.
 # Note:
-#  Generally run via the store() function and not directly
+#  Generally run via the store_record() function rather than directly
 #
 # Depends: bashlib,
 # API:
@@ -524,7 +548,6 @@ function _dehydrate()
 
                 _rtn=1 E="type mismatch. record '${_rname_}' is defined as an '${_rtype_info[0]}' (${_rtype_info[1]}), but requesting to assign as an '${_rtype_}' type."
                 error-f
-
             }
 
             # validate defined symbol name with type validator function(s) whose names were
@@ -618,7 +641,7 @@ function _dehydrate()
 function objquery()
 # Description: display various aspects of an object and it's
 #              associated instantiation status in the environment.
-# Depends: bashlib, tree, wc
+# Depends: bashlib tree wc
 # API:
 #  -o|--objtype <object_type> (currently only 'struct' is supported)
 #  -n|--name <object_name>    [_[:alnum:]]+
