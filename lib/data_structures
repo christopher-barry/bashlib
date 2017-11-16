@@ -534,7 +534,7 @@ function _dehydrate()
                 case ${_rtype_} in
 
                     b|f|h|i|s)
-                        try ${vf} $(evar ${_name_}_${_rname_}) || {
+                        ${vf} "$(evar ${_name_}_${_rname_})" || {
                             _rtn=1 E="type mismatch. defined symbol name '${_name_}_${_rname_}' is not of type '${_rtype_}'."
                             error-f
                         }
@@ -542,7 +542,7 @@ function _dehydrate()
 
                     A|a)
 
-                        try ${vf} ${_name_}_${_rname_} || {
+                        ${vf} ${_name_}_${_rname_} || {
                             _rtn=1 E="type mismatch. defined symbol name '${_name_}_${_rname_}' is not of type '${_rtype_}'."
                             error-f
                         }
@@ -577,16 +577,25 @@ function _dehydrate()
 
                     ;;
 
-                b|f|h|i|s) # bool,float,hex,integer,string
+                b|f|s) # bool,float,string (no declare type)
 
                     local v=
                     >${_structdata_}/${_name_}/${_rname_}/${_rname_}_value
 
-                    echo "declare -a ${_name_}_${_rname_}=\"$(evar "${_name_}_${_rname_}")\"" \
+                    echo "declare ${_name_}_${_rname_}=\"$(evar "${_name_}_${_rname_}")\"" \
                          >>${_structdata_}/${_name_}/${_rname_}/${_rname_}_value
 
                     ;;
 
+                h|i) # hex,integer
+
+                    local v=
+                    >${_structdata_}/${_name_}/${_rname_}/${_rname_}_value
+
+                    echo "declare -i ${_name_}_${_rname_}=\"$(evar "${_name_}_${_rname_}")\"" \
+                         >>${_structdata_}/${_name_}/${_rname_}/${_rname_}_value
+
+                    ;;
                 *)
                     _rtn=1 E="unknown datatype designator '${_rtype_}'"
                     error-f
