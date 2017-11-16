@@ -1322,11 +1322,11 @@ function gen_uuid()
 
 #-------------------------------------------------------------------------------
 function signal()
-# Description: sends a signal to a running pid
+# Description: sends a signal to a running process id
 # Depends: bashlib kill
 # API:
-#  $1 - pid of process to signal
-#  $2 - signal as name or number
+#  $1 - signal as name or number
+#  $2 - pid of process to signal
 # Inputs:
 # Outputs:
 # Environment:
@@ -1771,7 +1771,6 @@ function array_tac()
 #  $ one two three four
 #  $ array_tac myarr
 #  $ four three two one
-#  array
 #-
 {
     local _params_="${@}"
