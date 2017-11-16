@@ -4,11 +4,17 @@ function template_func()
 # Description: Standard function template
 # Depends: bashlib
 # API:
+#  -f|--foo <foovalue>
+#  -b|--bar <barvalue>
+#  ...
+#
+# -- OR --
+#
 #  $1 -
 #  $2 -
 #  $3 -
-#  $4 -
-#  $5 -
+#  ...
+#  $9 -
 #  $@ -
 #  $* -
 # Inputs:
@@ -23,6 +29,27 @@ function template_func()
 {
     local _params_="${@}"
     func-init
+    verify_argc $# MIN MAX || { _rtn=1 E="${_err} ${FUNCNAME}: invalid argument count"; error-f; }
+
+    local -a _lo=( --foo --bar )
+    local -a _so=(  -f    -b )
+    local -a _the_opts=( $(convert_long_options _lo _so "${_params_}") )
+
+    set -- "${_the_opts[@]}"
+    while getopts :f:b: OPT "${@}"; do
+
+        case $OPT in
+
+            f) local __foo__=${OPTARG} ;;
+
+            b) local __bar__=${OPTARG} ;;
+
+        esac
+
+    done
+
+    shift $(( OPTIND - 1 ))
+    OPTIND=1
 
     # function body
 

@@ -26,6 +26,6 @@ function template_minimal_func()
 
     # minimal function
 
-    minimal-func-return;:
+    minimal-func-return
 }
 ##------------------------------------------------------------------------------
