@@ -589,7 +589,7 @@ function log_debug_init()
     log_fd 4 " "
 
     # tell the coproc to source it's configuration
-    signal sighup $(<${DEBUG_FILTER_PID})
+    # signal sighup $(<${DEBUG_FILTER_PID})
 
     # Uncomment these to dump tons more stuff. I didn't
     # find the extra data all that helpful, but YMMV.
