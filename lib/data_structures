@@ -8,11 +8,12 @@
 #       D  A  T  A     S  T  R  U  C  T  U  R  E     L  I  B  R  A  R  Y       #
 ################################################################################
 
-# um, yeah, so none of this does anything yet. stop back later. possibly much.
+# see lib/macros::retrieve-records for the macro that instantiates
+# variables from structures
 
 #-------------------------------------------------------------------------------
 function typedef()
-# Description: creates/deletes a structured data record type definition
+# Description: creates/deletes a structured data type-definition
 # Depends: bashlib,
 # API:
 # switches: <-c|--create type_name> [-i|--inherit existing_type_name]  <record_type:record_name[:validator_funcname]> ...
@@ -29,17 +30,17 @@ function typedef()
 #            's' for string
 #     and <name> is an [_[:alnum:]]+ conformant name for the record.
 #
-#     if [:validator] is present, which is an [_[:alnum:]]+ conformant
-#     name, making the parameter a colon separated triplet, then
-#     'validator' is the name of an existing function that will be
-#     used to validate the information when it is assigned to 'name'
-#     with:
+#  if [:validator] is present, which is an [_[:alnum:]]+ conformant
+#  name, making the parameter a colon separated triplet, then
+#  'validator' is the name of an existing function that will be used
+#  to validate the information when it is assigned to 'name' with:
 #
-#      '_set struct <structure_name> <record_name> <value>' for type=[bfhis], or
-#      '_set struct <structure_name> <record_name> <<index|+>|key> <value>' for [Aa] types.
+#      'store --objtype struct --name mystruct --rectype i --record myint'
 #
-#     'validator' functions must take <value> as their only parameter and
-#     return true or false only, with no output.
+#  'validator' functions must take ${name}_${record} as their only
+#  parameter, and return true or false only, with no output. data is
+#  only validated on actual storage in structure.
+#
 # Inputs:
 # Outputs:
 # Environment:
@@ -55,7 +56,7 @@ function typedef()
 #  this creates a struct 'template', saving it to:
 #    ${_structdir_}/${_struct_name_}
 #    or, in plain English, something like:
-#    /run/user/$USER/my_script_name/26674360-fbdb-4f2f-83cd-73779a67c4b0/typedefs/type/hotel_room
+#    /run/user/$UID/my_script_name/26674360-fbdb-4f2f-83cd-73779a67c4b0/typedefs/type/hotel_room
 #    putting the data in the tmpfs filesystem for better performance.
 #
 #  the 'new()' function, defined elsewhere in this file, creates
@@ -65,102 +66,150 @@ function typedef()
 {
     local _params_="${@}"
     func-init
-    verify_argc $# 3 $# || { _rtn=1 E="${_err} ${FUNCNAME}: invalid argument count"; error-f; }
+    verify_argc $# 2 $# || { _rtn=1 E="${_err} ${FUNCNAME}: invalid argument count"; error-f; }
 
     local -a _lo=( --create --inherit --delete )
-    local -a _so=(  -c       -i       -d )
+    local -a _so=(  -c       -i        -d )
     local -a _the_opts=( $(convert_long_options _lo _so "${_params_}") )
 
     set -- "${_the_opts[@]}"
     while getopts :c:d:i: OPT "${@}"; do
+
         case $OPT in
+
             c) local __action__=create __structname__=${OPTARG} ;;
+
             i) local __inherit__=${OPTARG} ;;
+
             d) local __action__=delete __structname__=${OPTARG} ;;
+
         esac
+
     done
+
     shift $(( OPTIND - 1 ))
     OPTIND=1
 
     local _struct_name_=${__structname__}
 
     is_word ${_struct_name_} || { _rtn=1 E="bad struct name '${_struct_name_}', may only contain letter, number and '_' characters"; error-f; }
+
     local _struct=${_structdefs_}/${_struct_name_}
 
     case ${__action__} in
 
         create)
+
             # create the struct location
             [[ "${__inherit__}" ]] && {
+
                 is_exist_dir ${_structdefs_}/${__inherit__} && {
+
                     local _inherited=${_structdefs_}/${__inherit__}
+
                 } || {
+
                     _rtn=1 E="inherited struct '${__inherit__}' not found in ${_structdefs_}/."; error-f;
+
                 }
+
                 (
                     cd ${_structdefs_}
                     cp -r ${__inherit__} ${_struct_name_}
                 )
+
             } || {
+
                 is_exist_dir ${_struct} && { _rtn=1 E="struct '${_struct}' already exists."; error-f; }
                 mkdir -p ${_struct}
+
             }
+
+            # save the parent's name so instances can know
             echo ${_struct_name_} >${_struct}/.struct_type
 
             # create the struct layout
             (
                 cd ${_struct}
                 local p=
-                for p in "${@}"; do
-                    # create a temporary array of ('type' 'name' 'validator') from each record spec parameter
-                    local -a _tnv=( ${p//:/ } )
-                    (( ${#_tnv[@]} > 1 )) && (( ${#_tnv[@]} < 4 )) || { _rtn=1 E="invalid record defnition: '${p}'"; error-f; }
-                    is_word ${_tnv[1]} || { _rtn=1 E="bad record name '${_tnv[1]}', may only contain letter, number and '_' characters"; error-f; }
-                    is_exist_dir ${_tnv[1]} && { _rtn=1 E="record '${_tnv[1]}' already exists."; error-f; }
-                    mkdir -p ${_struct}/${_tnv[1]}
-                    (
-                        cd ${_tnv[1]}
-                        echo "${_tnv[1]}" >${_tnv[1]}_name
 
+                for p in "${@}"; do
+
+                    # create a temporary array of ('type' 'name'
+                    # 'validator') from each record spec parameter
+                    local -a _tnv=( ${p//:/ } )
+
+                    (( ${#_tnv[@]} > 1 )) && (( ${#_tnv[@]} < 4 )) || { _rtn=1 E="invalid record defnition: '${p}'"; error-f; }
+
+                    is_word ${_tnv[1]} || { _rtn=1 E="bad record name '${_tnv[1]}', may only contain letter, number and '_' characters"; error-f; }
+
+                    is_exist_dir ${_tnv[1]} && { _rtn=1 E="record '${_tnv[1]}' already exists."; error-f; }
+
+                    # make the record's directory
+                    mkdir -p ${_struct}/${_tnv[1]}
+
+                    (
+                        cd ${_tnv[1]} # operate in the record's directory
+
+                        # init record type and any default validator functions
                         case ${_tnv[0]} in
+
                             A)
-                                echo "associative_array" >${_tnv[1]}_type
-                                echo "is_struct_hash" >${_tnv[1]}_validator
+                                echo "${_tnv[0]} associative_array" >${_tnv[1]}_type
+                                echo "is_hash" >${_tnv[1]}_validator
                                 ;;
+
                             a)
-                                echo "indexed_array" >${_tnv[1]}_type
-                                echo "is_struct_array" >${_tnv[1]}_validator
+                                echo "${_tnv[0]} indexed_array" >${_tnv[1]}_type
+                                echo "is_array" >${_tnv[1]}_validator
                                 ;;
+
                             b)
-                                echo "bool" >${_tnv[1]}_type
+                                echo "${_tnv[0]} bool" >${_tnv[1]}_type
                                 echo "is_bool" >${_tnv[1]}_validator
                                 ;;
+
                             f)
-                                echo "float" >${_tnv[1]}_type
+                                echo "${_tnv[0]} float" >${_tnv[1]}_type
                                 echo "is_float" >${_tnv[1]}_validator
                                 ;;
+
                             h)
-                                echo "hex" >${_tnv[1]}_type
+                                echo "${_tnv[0]} hex" >${_tnv[1]}_type
                                 echo "is_hex" >${_tnv[1]}_validator
                                 ;;
+
                             i)
-                                echo "integer" >${_tnv[1]}_type
+                                echo "${_tnv[0]} integer" >${_tnv[1]}_type
                                 echo "is_decimal" >${_tnv[1]}_validator
                                 ;;
+
                             s)
-                                echo "string" >${_tnv[1]}_type
+                                echo "${_tnv[0]} string" >${_tnv[1]}_type
                                 echo "is_string" >${_tnv[1]}_validator
                                 ;;
+
                             *)
                                 _rtn=1 E="invalid type specification '${_tnv[0]}'"
                                 error-f
                                 ;;
+
                         esac
 
-                        # if an optional custom validator function is assigned, add it to standard validator
+                        # if an optional custom validator function is assigned, add it to validator list. these
+                        # validators will be run against the record's assigned values as they are attempted to be
+                        # set into the record with store()
                         (( ${#_tnv[@]} == 3 )) && {
-                            is_function ${_tnv[2]} || { _rtn=1 E="validator function '${_tnv[2]}' for record '${_tnv[1]}' is not defined."; error-f; }
+
+                            is_function ${_tnv[2]} || {
+
+                                _rtn=1 E="validator function '${_tnv[2]}()' for record '${_tnv[1]}' is undefined."
+                                error-f
+
+                            }
+
                             echo "${_tnv[2]}" >>${_tnv[1]}_validator
+
                         } || :
                     )
                 done
@@ -168,7 +217,9 @@ function typedef()
             ;;
 
         delete)
+
             [[ -d ${_struct} ]] && rm -rf ${_struct}
+
             ;;
     esac
 
@@ -181,9 +232,9 @@ function new()
 # Description: instantiates a new instance of an object
 # Depends: bashlib,
 # API:
-#  $1   - object type
-#  $2   - object type_name
-#  $3   - instance name
+#  <-o|--objtype> <object_type> (currently only 'struct' is supported)
+#  <-p|--parent> <object_parent_def>
+#  <-n|--name> <instance_name>
 # Inputs:
 # Outputs:
 # Environment:
@@ -191,37 +242,157 @@ function new()
 #  0 on success
 #  1 on failure
 # Examples:
-#  new struct my_struct_type my_struct_name
+#  new -t struct -p my_type -n my_datastructure
 #-
 {
     local _params_="${@}"
     func-init
-    verify_argc $# 3 || { _rtn=1 E="${_err} ${FUNCNAME}: invalid argument count"; error-f; }
+    verify_argc $# 6 || { _rtn=1 E="${_err} ${FUNCNAME}: invalid argument count"; error-f; }
 
-    local _obj_=${1}
-    local _type_=${2}
-    local _name_=${3}
+    local -a _lo=( --objtype --parent --name )
+    local -a _so=(  -o        -p       -n )
+    local -a _the_opts=( $(convert_long_options _lo _so "${_params_}") )
 
-    case ${_obj_} in
+    set -- "${_the_opts[@]}"
+    while getopts :o:p:n: OPT "${@}"; do
+
+        case $OPT in
+
+            o) local __objtype__=${OPTARG} ;;
+
+            p) local __parent__=${OPTARG} ;;
+
+            n) local __name__=${OPTARG} ;;
+
+        esac
+
+    done
+
+    shift $(( OPTIND - 1 ))
+    OPTIND=1
+
+    case ${__objtype__} in
 
         struct)
-            local _struct_dir=${_rundir_}/${STRUCT_TYPEDIR}
-            local _data_dir=${_rundir_}/${STRUCT_DATADIR}
 
-            is_exist_dir ${_struct_dir}/${_type_} || { _rtn=1 E="struct typedef '${_type_}' does not exist."; error-f; }
-            is_exist_dir ${_data_dir}/${_name_} && {
-                _rtn=1 E="struct instance '${_name_}' already exists."; error-f;
+            is_exist_dir ${_structdefs_}/${__parent__} || { _rtn=1 E="struct typedef '${__parent__}' does not exist."; error-f; }
+
+            is_exist_dir ${_structdata_}/${__name__} && {
+
+                _rtn=1 E="struct instance '${__name__}' already exists."; error-f;
+
             } || {
-                mkdir -p ${_data_dir}/${_name_} || { _rtn=1 E="creating struct instance '${_name_}' failed."; error-f; }
+
+                mkdir -p ${_structdata_}/${__name__} || { _rtn=1 E="creating struct instance '${__name__}' failed."; error-f; }
+
             }
 
-            (
-                cd ${_struct_dir}/${_type_}
-                cp -r * ${_data_dir}/${_name_} || { _rtn=1 E="instantiating '${_name_}' failed."; error-f; }
-            )
+            # create the new structure from the parent
+            pushd ${_structdefs_} &>/dev/null
+            rsync -qa ${__parent__}/ ${_structdata_}/${__name__}/ || { popd  2>/dev/null; _rtn=1 E="instantiating '${__name__}' failed."; error-f; }
+            popd  &>/dev/null
+
+            # init each record's value to it's type-specific empty value
+            pushd ${_structdata_}/${__name__} &>/dev/null
+            local _record=
+            for _record in $(find . -mindepth 1 -maxdepth 1 -type d); do
+
+                _record=$(basename ${_record})
+
+                local -a _types=($(<${_record}/${_record}_type))
+
+                [[ ${_types[0]} =~ [A] ]] && echo declare -A ${__name__}_${_record}='()'   >${_record}/${_record}_value
+
+                [[ ${_types[0]} =~ [a] ]] && echo declare -a ${__name__}_${_record}='()'   >${_record}/${_record}_value
+
+                [[ ${_types[0]} =~ [b] ]] && echo declare ${__name__}_${_record}=false   >${_record}/${_record}_value
+
+                [[ ${_types[0]} =~ [f] ]] && echo declare ${__name__}_${_record}=0.0     >${_record}/${_record}_value
+
+                [[ ${_types[0]} =~ [h] ]] && echo declare -i ${__name__}_${_record}=0x0  >${_record}/${_record}_value
+
+                [[ ${_types[0]} =~ [i] ]] && echo declare -i ${__name__}_${_record}=0    >${_record}/${_record}_value
+
+                [[ ${_types[0]} =~ [s] ]] && echo declare ${__name__}_${_record}=      >${_record}/${_record}_value
+
+            done
+            popd &>/dev/null
+
             ;;
+
         *)
-            _rtn=1 E="unknown object type"; error-f
+            _rtn=1 E="unknown object type '${__objtype__}'"; error-f
+
+            ;;
+    esac
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+
+#-------------------------------------------------------------------------------
+function store_structure()
+# Description: store all data in a previously defined strucure
+# Depends: bashlib,
+# API:
+#  <-o|--objtype> <object_type> (currently only 'struct' is supported)
+#  <-n|--name> <object_name>
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  store_strucure -o ${o} -n ${n}
+#-
+{
+    local _params_="${@}"
+    func-init
+    verify_argc $# 4 || { _rtn=1 E="${_err} ${FUNCNAME}: invalid argument count"; error-f; }
+
+    local -a _lo=( --objtype --name )
+    local -a _so=(  -o        -n )
+    local -a _the_opts=( $(convert_long_options _lo _so "${_params_}") )
+
+    set -- "${_the_opts[@]}"
+    while getopts :o:n: OPT "${@}"; do
+
+        case $OPT in
+
+            o) local __objtype__=${OPTARG} ;;
+
+            n) local __name__=${OPTARG} ;;
+
+        esac
+
+    done
+
+    shift $(( OPTIND - 1 ))
+    OPTIND=1
+
+    case ${__objtype__} in
+
+        struct)
+
+            local _record=
+            for _record in $(find ${_structdata_}/${__name__} -mindepth 1 -maxdepth 1 -type d); do
+
+                local _rec=$(basename ${_record})
+                local -a _rectype=
+                _rectype=( $(<${_structdata_}/${__name__}/${_rec}/${_rec}_type) )
+
+                store_record -o struct -n ${__name__} -t ${_rectype[0]} -r ${_rec} || { _rtn=$?; error-f; }
+
+            done
+
+            ;;
+
+        *)
+            _rtn=1 E="unknown object type '${__objtype__}'"
+            error-f
+
             ;;
     esac
 
@@ -230,15 +401,15 @@ function new()
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
-function _set()
-# Description: store data in a previously defined object with mulitple
+function store_record()
+# Description: store data in a previously defined object with multiple
 #              type vlaidation mechanisms.
 # Depends: bashlib,
 # API:
-#  $1 - object type
-#  $2 - object name
-#  $3 - object record_id
-#  $@ - object record_id data
+#  <-o|--objtype> <object_type> (currently only 'struct' is supported)
+#  <-n|--name> <object_name>
+#  <-t|--rectype> <record_type>
+#  <-r|--record> <record_name>
 # Inputs:
 # Outputs:
 # Environment:
@@ -246,27 +417,71 @@ function _set()
 #  0 on success
 #  1 on failure
 # Examples:
-#  _set ${t} ${n} ${r} "${rd[@]}"
+#  store -o ${o} -n ${n} -t ${t} -r "${r}"
 #-
 {
     local _params_="${@}"
     func-init
-    verify_argc $# 4 || { _rtn=1 E="${_err} ${FUNCNAME}: invalid argument count"; error-f; }
+    verify_argc $# 8 || { _rtn=1 E="${_err} ${FUNCNAME}: invalid argument count"; error-f; }
 
-    # function body
+    local -a _lo=( --objtype --name --rectype --record )
+    local -a _so=(  -o        -n     -t        -r )
+    local -a _the_opts=( $(convert_long_options _lo _so "${_params_}") )
+
+    set -- "${_the_opts[@]}"
+    while getopts :o:n:t:r: OPT "${@}"; do
+
+        case $OPT in
+
+            o) local __objtype__=${OPTARG} ;;
+
+            n) local __name__=${OPTARG} ;;
+
+            t) local __rectype__=${OPTARG} ;;
+
+            r) local __record__=${OPTARG} ;;
+
+        esac
+
+    done
+
+    shift $(( OPTIND - 1 ))
+    OPTIND=1
+
+    case ${__objtype__} in
+
+        struct)
+
+            try _dehydrate ${__objtype__} ${__name__} ${__rectype__} ${__record__} || _rtn=$?
+
+            ;;
+
+        *)
+            _rtn=1 E="unknown object type '${__objtype__}'"
+            error-f
+
+            ;;
+    esac
 
     func-return
 }
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
-function _get()
-# Description: retrieve data from an existing object
+function _dehydrate()
+# Description: save a symbol's definition to file in a form that can
+#              be easily restored later with macros 'retrieve-local'
+#              and 'retrieve-global'. see macro lib for usage.
+#
+# Note:
+#  Generally run via the store() function and not directly
+#
 # Depends: bashlib,
 # API:
-#  $1 - object type
+#  $1 - object type (currently only 'struct' is supported)
 #  $2 - object name
-#  $3 - object record_id|<regex>
+#  $3 - record type [Aabfhis]
+#  $4 - record name (must exist in the environment)
 # Inputs:
 # Outputs:
 # Environment:
@@ -274,15 +489,478 @@ function _get()
 #  0 on success
 #  1 on failure
 # Examples:
-#  v=$(_get ${n})
+#  _dehydrate ${o} ${n} ${t} ${r}
 #-
 {
     local _params_="${@}"
     func-init
-    verify_argc $# 2 3 || { _rtn=1 E="${_err} ${FUNCNAME}: invalid argument count"; error-f; }
+    verify_argc $# 4 || { _rtn=1 E="${_err} ${FUNCNAME}: invalid argument count"; error-f; }
 
-    # function body
+    local _objtype_="${1}"
+    local _name_="${2}"
+    local _rtype_="${3}"
+    local _rname_="${4}"
+
+    case ${_objtype_} in
+
+        struct)
+
+            # verify names are conformant
+            is_word ${_name_} || { _rtn=1 E="object name '${_name_}' is invalid. must match [_[:alnum:]]+"; error-f; }
+
+            is_word ${_rname_} || { _rtn=1 E="record name '${_rname_}' is invalid.must match [_[:alnum:]]+"; error-f; }
+
+            # verify structure exists
+            is_exist_dir ${_structdata_}/${_name_} || { _rtn=1 E="object name '${_name_}' does not exist"; error-f; }
+
+            is_exist_dir ${_structdata_}/${_name_}/${_rname_} || { _rtn=1 E="record name '${_rname_}' does not exist"; error-f; }
+
+            # verify type
+            [[ "${_rtype_}" == [Aabfhis] ]] || { _rtn=1 E="record type '${_rtype_}' is invalid. must match [Aabfhis] regex"; error-f; }
+
+            declare -a _rtype_info=( $(<${_structdata_}/${_name_}/${_rname_}/${_rname_}_type) )
+
+            [[ "${_rtype_}" == "${_rtype_info[0]}" ]] || {
+
+                _rtn=1 E="type mismatch. record '${_rname_}' is defined as an '${_rtype_info[0]}' (${_rtype_info[1]}), but requesting to assign as an '${_rtype_}' type."
+                error-f
+
+            }
+
+            # validate defined symbol name with type validator function(s) whose names were
+            # embedded in the struct during initial typedef in '${_rname_}_validator'
+            while read vf; do
+
+                case ${_rtype_} in
+
+                    b|f|h|i|s)
+                        try ${vf} $(evar ${_name_}_${_rname_}) || {
+                            _rtn=1 E="type mismatch. defined symbol name '${_name_}_${_rname_}' is not of type '${_rtype_}'."
+                            error-f
+                        }
+                        ;;
+
+                    A|a)
+
+                        try ${vf} ${_name_}_${_rname_} || {
+                            _rtn=1 E="type mismatch. defined symbol name '${_name_}_${_rname_}' is not of type '${_rtype_}'."
+                            error-f
+                        }
+                        ;;
+                esac
+
+            done < <(cat ${_structdata_}/${_name_}/${_rname_}/${_rname_}_validator)
+
+            case ${_rtype_} in
+
+                A) # hash
+
+                    local v=
+                    >${_structdata_}/${_name_}/${_rname_}/${_rname_}_value
+
+                    for v in $(evar "!${_name_}_${_rname_}[@]"); do
+                        echo "declare -A ${_name_}_${_rname_}[${v}]=\"$(evar "${_name_}_${_rname_}[${v}]")\"" \
+                             >>${_structdata_}/${_name_}/${_rname_}/${_rname_}_value
+                    done
+
+                    ;;
+
+                a) # array
+
+                    local v=
+                    >${_structdata_}/${_name_}/${_rname_}/${_rname_}_value
+
+                    for v in $(evar "!${_name_}_${_rname_}[@]"); do
+                        echo "declare -a ${_name_}_${_rname_}[${v}]=\"$(evar "${_name_}_${_rname_}[${v}]")\"" \
+                             >>${_structdata_}/${_name_}/${_rname_}/${_rname_}_value
+                    done
+
+                    ;;
+
+                b|f|h|i|s) # bool,float,hex,integer,string
+
+                    local v=
+                    >${_structdata_}/${_name_}/${_rname_}/${_rname_}_value
+
+                    echo "declare -a ${_name_}_${_rname_}=\"$(evar "${_name_}_${_rname_}")\"" \
+                         >>${_structdata_}/${_name_}/${_rname_}/${_rname_}_value
+
+                    ;;
+
+                *)
+                    _rtn=1 E="unknown datatype designator '${_rtype_}'"
+                    error-f
+
+                    ;;
+            esac
+            ;;
+
+        *)
+            _rtn=1 E="unknown object type '${_objtype_}'. 'struct' is currently the only valid object type."
+            error-f
+            ;;
+    esac
 
     func-return
 }
 ##------------------------------------------------------------------------------
+:<<'EOF'
+#-------------------------------------------------------------------------------
+function objquery()
+# Description: display various aspects of an object and it's
+#              associated instantiation status in the environment.
+# Depends: bashlib, tree, wc
+# API:
+#  -o|--objtype <object_type> (currently only 'struct' is supported)
+#  -n|--name <object_name>    [_[:alnum:]]+
+#  -t|--rectype <record_type> [Aabfhis]
+#  -r|--record <record_name>  [_[:alnum:]]+
+#  -s|--show <active|tree|parent>
+#  -c|--count <elements|bytes>
+#  -S|--search <active|tree> <regex>
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  # show all hash-type record names in mystruct
+#   objquery -o struct -n mystruct -t A -s tree
+#
+#  # show names of all instantiated records from mystruct
+#   objquery --objtype struct --name mystruct --show active
+#
+#  # search for record names in env from mystruct
+#   objquery -o struct -S "eth*" -s active -n mystruct
+#-
+{
+    local _params_="${@}"
+    func-init
+
+    verify_argc $# 4 $# || { _rtn=1 E="${_err} ${FUNCNAME}: invalid argument count"; error-f; }
+
+    local -a _lo=( --objtype --name --rectype --record --show --count --search --print )
+    local -a _so=(  -o        -n     -t        -r       -s     -c      -S       -p )
+    local -a _the_opts=( $(convert_long_options _lo _so "${_params_}") )
+
+    set -- "${_the_opts[@]}"
+    while getopts :o:n:t:r:s:c:S:p OPT "${@}"; do
+
+        case $OPT in
+
+            o)
+                local __objtype__=${OPTARG}
+                is_word ${__objtype__} || { _rtn=1 E="object type name '${__objtype__}' is invalid"; error-f; }
+                ;;
+
+            n)
+                local __name__=${OPTARG}
+                is_word ${__name__} || { _rtn=1 E="object name '${__name__}' is invalid"; error-f; }
+                ;;
+
+            t)
+                local __rectype__=${OPTARG}
+                [[ "${__rectype__}" == [Aabfhis] ]] || { _rtn=1 E="record type '${__rectype__}' is invalid"; error-f; }
+                ;;
+
+            r)
+                local __record__=${OPTARG}
+                is_word ${__record__} || { _rtn=1 E="record name '${__record__}' is invalid"; error-f; }
+                ;;
+
+            s)
+                local __show__=${OPTARG}
+                [[ ${__show__} =~ (a|active)|(t|tree) ]] || {
+                    _rtn=1 E="invalid --show type: must be <[a|active]|[t|tree]>."
+                    error-f
+                }
+                ;;
+
+            c)
+                local __count__=${OPTARG}
+                [[ ${__count__} =~ (e|elements)|(b|bytes) ]] || {
+                    _rtn=1 E="invalid --count type: must be <[e|elements]|[b|bytes]>."
+                    error-f
+                }
+                ;;
+
+            S)
+                local __search__="${OPTARG}"
+                [[ "${__search__}" ]] || {
+                    _rtn=1 E="empty search parameters."
+                    error-f
+                }
+                ;;
+
+            p)
+                local __print__=true
+                ;;
+
+            *)
+                _rtn=1 E="invalid option '$OPT'."
+                error-f
+                ;;
+
+        esac
+
+    done
+
+    shift $(( OPTIND - 1 ))
+    OPTIND=1
+
+    [[ ${__objtype__} ]] && {
+
+        case ${__objtype__} in
+
+            struct)
+
+                # --search command switch on commandline
+                [[ "${__search__}" ]] && {
+
+                    case ${__show__} in
+
+                        a|active)
+
+                            declare -ga _found_defined=()
+
+                            # no name or record give - only a search term
+                            [[ ! ${__name__} && ! ${__record__} ]] && {
+
+                                array_append _found_defined < <(
+                                    declare -p | grep "^[[:alpha:]]\+[[:blank:]][-[:alpha:]]\+[[:blank:]]${__search__}=" \
+                                        | awk -F= "{print $1}" | awk '{print $3}'
+                                )
+
+                            }
+
+                            # name given, assume search is for record
+                            [[ ${__name__} && ! ${__record__} ]] && {
+
+                                array_append _found_defined < <(
+                                    declare -p | grep "^[[:alpha:]]\+[[:blank:]][-[:alpha:]]\+[[:blank:]]${__name__}_${__search__}=" \
+                                        | awk -F= "{print $1}" | awk '{print $3}'
+                                )
+
+                            }
+
+                            # record given, assuming search is for name
+                            [[ ! ${__name__} && ${__record__} ]] && {
+
+                                array_append _found_defined < <(
+                                    declare -p | grep "^[[:alpha:]]\+[[:blank:]][-[:alpha:]]\+[[:blank:]]${__search__}_${__record__}=" \
+                                        | awk -F= "{print $1}" | awk '{print $3}'
+                                )
+
+                            }
+
+                            # name and record given, ignore search param
+                            [[ ${__name__} && ${__record__} ]] && {
+
+                                array_append _found_defined < <(
+                                    declare -p | grep "^[[:alpha:]]\+[[:blank:]][-[:alpha:]]\+[[:blank:]]${__name__}_${__record__}=" \
+                                        | awk -F= "{print $1}" | awk '{print $3}'
+                                )
+
+                            }
+
+                            # name_record pair names found in environment,
+                            # however not guaranteed to be stored in a struct
+                            (( ${#_found_defined[@]} )) && {
+
+                                array_sort_elements _found_defined
+
+                                [[ ${__print__} ]] && {
+
+                                    array_printcols 4 _found_defined
+
+                                }
+                            }
+
+                            ;;
+
+
+                        t|tree)
+
+                            # save matches found in structs
+                            declare -ga _found_stored=()
+
+                            # no name or record given - only a search term so
+                            # we'll get name_record pairs where either match
+                            [[ ! ${__name__} && ! ${__record__} ]] && {
+
+                                # get all matching struct names
+                                declare -ga _found_stored_names=()
+
+                                array_append _found_stored_names < <(
+
+                                    $(basename $(find ${_structdata_} -mindepth 1 -maxdepth 1 -type d -name "${__search__}"))
+
+                                )
+
+                                # grab every record name under each matched struct names, and add them
+                                # as ${name}_${record} names to the ${_found_stored} array
+                                local -i i=
+                                for (( i = 0; i < ${#_found_stored_names[@]}; i++ )); do
+
+                                    array_append _found_stored < <(
+
+                                        local _record=
+                                        for _record in $(basename \
+                                                             $(find ${_structdata_}/${_found_stored_names[i]} -mindepth 1 -maxdepth 1 -type d)); do
+
+                                            echo "${_found_stored_names[i]}_${_record}"
+
+                                        done
+                                    )
+                                done
+
+                                # get all records that match
+                                declare -ga _found_stored_records=()
+
+                                array_append _found_stored_records < <(
+
+                                    $(basename $(find ${_structdata_} -mindepth 2 -maxdepth 2 -type d -name "${__search__}"))
+
+                                )
+
+                                # for each matching record, identify it's parent (the struct name), and
+                                # add them as ${name}_${record} names to the ${_found_stored} array
+                                local -i i=
+                                for (( i = 0; i < ${#_found_stored_records[@]}; i++ )); do
+
+                                    array_append _found_stored < <(
+
+                                        local _name=
+                                        for _name in $(basename \
+                                                           $(dirname \
+                                                                 $(find ${_structdata_} -mindepth 2 -maxdepth 2 -type d -name "${_found_stored_records[i]}"))); do
+
+                                            echo "${_name}_${_found_stored_records[i]}"
+
+                                        done
+                                    )
+                                done
+                            }
+
+                            # name given, assume search is for record
+                            [[ ${__name__} && ! ${__record__} ]] && {
+
+                                # get all the matching records under name
+                                array_append _found_stored < <(
+
+                                    local _record=
+                                    for _record in $(basename $(find ${_structdata_}/${__name__} -mindepth 1 -maxdepth 1 -type d -name "${__search__}")); do
+
+                                        echo "${__name__}_${_record}"
+                                    done
+                                )
+                            }
+
+                            # record given, assume search is for name
+                            [[ ! ${__name__} && ${__record__} ]] && {
+
+                                # get all the names with the given record
+                                array_append _found_stored < <(
+
+                                    local _name=
+                                    for _name in $(basename $(dirname $(find ${_structdata_} -mindepth 2 -maxdepth 2 -type d -name "${__record__}"))); do
+
+                                        [[ "${_name}" =~ ${__search__} ]] && {
+
+                                            echo "${_name}_${__record__}"
+
+                                        }
+                                    done
+                                )
+                            }
+
+                            # name and record given
+                            [[ ${__name__} && ${__record__} ]] && {
+
+                                # return name_record pair if found
+                                array_append _found_stored < <(
+
+                                    local _record=
+                                    _record=$(basename $(find ${_structdata_}/${__name__} -mindepth 1 -maxdepth 1 -type d -name "${__record__}")); do
+
+                                    [[ "${_record}" =~ ${__record__} ]] && {
+
+                                        echo "${__name__}_${__record__}"
+
+                                    }
+                                )
+                            }
+
+                            # remove any duplicates
+                            (( ${#_found_stored[@]} )) && {
+
+                                array_sort_elements _found_stored -u
+
+                                [[ ${__print__} ]] && {
+
+                                    array_printcols 4 _found_stored
+
+                                }
+                            }
+                            ;;
+                    esac
+
+                }
+
+
+                [[ ${__count__} ]] && {
+
+                    case ${__count__} in
+
+                        e|elements)
+                            :
+                            ;;
+
+                        b|bytes)
+                            :
+                            ;;
+                    esac
+                }
+
+                ;;
+
+            *)
+                _rtn=1 E="unknown object type '${_type_}'. 'struct' is currently the only valid object type."
+                error-f
+                ;;
+        esac
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function objsync()
+# Description: sychronize active object state to/from storage
+# Depends: bashlib
+# API:
+#  -o|--objtype <object_type> (currently only 'struct' is supported)
+#  -n|--name <object_name>    [_[:alnum:]]+
+#  -t|--rectype <record_type> [Aabfhis]
+#  -r|--record <record_name>  [_[:alnum:]]+
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params_="${@}"
+    func-init
+
+    :
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+EOF

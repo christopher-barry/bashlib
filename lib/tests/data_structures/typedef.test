@@ -1,0 +1,182 @@
+# -*- mode: sh; -*-
+#-------------------------------------------------------------------------------
+function _test_typedef()
+# Description: excercise the typdef function
+# Depends: bashlib
+# API:
+#  -f|--foo <foovalue>
+#  -b|--bar <barvalue>
+#  ...
+#
+# -- OR --
+#
+#  $1 -
+#  $2 -
+#  $3 -
+#  ...
+#  $9 -
+#  $@ -
+#  $* -
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params_="${@}"
+    func-init
+
+    rm -rf ${_structdefs_}/*
+    rm -rf ${_structdata_}/*
+
+    # create a basic struct definition
+    typedef --create testdef A:testhash a:testarray s:teststring || { _rtn=1; error-f; }
+
+    # create a new one, inheriting from the previous
+    typedef --create testdef2 --inherit testdef b:testbool i:testint f:testfloat h:testhex || { _rtn=1; error-f; }
+
+    # delete the first one
+    typedef --delete testdef || { _rtn=1; error-f; }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function _test_new()
+# Description: tests the new function
+# Depends: bashlib,
+# API:
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    minimal-func-init
+
+    # instantiate a struct called teststruct
+    new -o struct -p testdef2 -n teststruct || { _rtn=1; error-f; }
+
+    minimal-func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function _test_store_structure()
+# Description: take the current in-memory record state and write to storage
+# Depends: bashlib,
+# API:
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    minimal-func-init
+
+    store_structure -o struct -n teststruct || { rtn=$?; error-f; }
+
+    minimal-func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+function test_structure_functions()
+# Description: drive the various structure functions
+# Depends: bashlib,
+# API:
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    func-init
+
+    # create a typedef, create a second, inheriting the first, delete
+    # the first
+    _test_typedef || { _rtn=$?; error-f; }
+
+    # instantiate a structure based on the typedef
+    _test_new || { _rtn=$?; error-f; }
+
+    # test pulling the state of the new, initialized structure
+    log "retrieving records..."
+    _structure=teststruct
+    retrieve-records
+
+    # show what the state is
+    log "show records..."
+    typeset -p | grep 'teststruct.*$'
+
+    # modify the values in the local environment
+    log "modify records..."
+    while read d t k; do
+        case ${t} in
+            *A*) declare -A ${k}[NEW_KEY]="new hash value" ;;
+            *a*) declare -a ${k}+="new_array_value" ;;
+            *i*) declare -i ${k}=10 ;;
+        esac
+        case ${k} in
+            *float) declare ${k}=10.25 ;;
+            *bool)  declare ${k}=yes ;;
+            *string) declare ${k}="Hello World" ;;
+        esac
+    done < <(typeset -p | grep teststruct_ | awk -F= '{print $1}')
+
+    # show the local environment
+    log "show records..."
+    typeset -p | grep 'teststruct.*$'
+
+    # store the local environment of the structure back to disk
+    log "store records..."
+    _test_store_structure || { _rtn=$?; error-f; }
+
+    # unset the environment
+    log "delete in-memory records..."
+    while read d t k; do
+        log "unsetting ${k}"
+        unset ${k}
+    done < <(typeset -p | grep teststruct_ | awk -F= '{print $1}')
+
+    # show it's unset
+    log "show records..."
+    typeset -p | grep 'teststruct.*$'
+
+    # pull the updated structure
+    log "retrieving records..."
+    _structure=teststruct
+    retrieve-records
+
+    # show it's in the local environment
+    log "show records..."
+    typeset -p | grep 'teststruct.*$'
+
+    # test query functionality
+    # _test_objquery || { rtn=$?; error-f; }
+
+    func-return
+}
+##------------------------------------------------------------------------------
+
+test_structure_functions || { _rtn=$?; error-f; }

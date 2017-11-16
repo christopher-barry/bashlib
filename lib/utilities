@@ -1543,7 +1543,7 @@ function array_printcols()
         } || {
             c= ; echo
         }
-    done < <(echo -e "$(evar "${array_name}[@]/%/\n")")
+    done < <(echo -e "$(evar "${array_name}[@]/%/\n")") | column -t
 
     func-return
 }
@@ -2023,6 +2023,25 @@ function is_writable_dir()
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
+function is_defined()
+# Description: test if parameter is a defined symbol
+# Depends: bashlib
+# API:
+#  $1 - symbol name (allows name to be piped in instead)
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#  is_defined symbol_name && do_stuff || complain
+#  echo "symbol_name" | is_defined && do_stuff || complain
+#-
+{
+    local _sym=${1:-$(get_stdin)}
+    [[ "$(typeset | grep "^${_sym}=" | awk -F= '{print $1}')" ]]
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
 function is_function()
 # Description: test if parameter is a defined function name
 # Depends: bashlib
@@ -2052,7 +2071,7 @@ function is_hash()
 #  is_hash my_hash && { foo=${my_hash[bar]}; }
 #-
 {
-    [[ "$(typeset -p "${1}" 2>/dev/null)" =~ ^(declare|local)[[:blank:]]+(-A)[[:blank:]].*$ ]]
+    [[ "$(typeset -A | grep "${1}=.*")" ]]
 }
 ##------------------------------------------------------------------------------
 
@@ -2069,7 +2088,7 @@ function is_array()
 #  is_array my_array && { foo="${my_array[0]}"; }
 #-
 {
-    [[ "$(typeset -p "${1}" 2>/dev/null)" =~ ^(declare|local)[[:blank:]]+(-a)[[:blank:]].*$ ]]
+    [[ "$(typeset -a | grep "${1}=.*" 2>/dev/null)" ]]
 }
 ##------------------------------------------------------------------------------
 

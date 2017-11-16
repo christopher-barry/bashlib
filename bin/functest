@@ -106,6 +106,9 @@ case "${1}" in
     -D|--debug)   _DEBUG_=true;   shift ;;
 esac
 
+# special for functest
+export KEEP_RUNDIR=1 WITH_SESSION=test-session-${RANDOM}
+
 # initialize session, logging, debug, and program subsystems
 session-init; log_init; log_debug_init; _params_="${@}"; prog-init
 

@@ -232,6 +232,28 @@ alias get-env-regular-names='declare -p | awk -F= "{ print \$1 }" | grep "^decla
 # generate an array of all set local variables
 alias get-env-local='readarray _${FUNCNAME}_env < <(local|grep -v '^E=.*$')'
 
+# tests if a piped-in symbol name exits in the local env
+alias is-local='[[ "$(local | grep "^$(cat -)=" | awk -F= "{print $1}")" ]]'
+
+# tests if a piped-in symbol name exits in the global env
+alias is-global='[[ "$(typeset | grep "^$(cat -)=" | awk -F= "{print $1}")" ]]'
+
+##----------------------------------------------------------------------
+
+
+#---[ d a t a s t r u c t u r e   i n s t a n t i a t i o n ]-----------
+
+# set _structure, then run retrieve-records:
+#   local _structure=${_name_}   # assign target structure name to embedded alias variable
+#   retrieve-records             # source each record's value
+#
+# record variables have form: ${structurename_recordname}
+#
+# instantiate records
+alias retrieve-records='local _rec; for _rec in $(find ${_structdata_}/${_structure} -type f -name "*_value"); do source ${_rec}; done'
+
+##----------------------------------------------------------------------
+
 : END MACRO DEFINITIONS
 
 
