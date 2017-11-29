@@ -71,6 +71,31 @@ function evar()
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
+function get_depends()
+# Description: gather all noted dependencies for all of bashlib
+# Depends: bashlib
+# API:
+#  none
+# Inputs:
+# Outputs:
+# Environment:
+# Returns:
+#  0 on success
+#  1 on failure
+# Examples:
+#
+#-
+{
+    local _params="${@}"
+    minimal-func-init
+
+    grep -r '\# Depends: ' ${IPATH//:/ } | awk '{print substr($0,index($0,$3))}' | sed 's/ /\n/g' | sort -u
+
+    minimal-func-return
+}
+##------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
 function elvar()
 # Description: return the value of an array element varname (varel)
 # Depends: bashlib
