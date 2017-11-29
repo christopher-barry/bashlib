@@ -2,7 +2,7 @@
 #-------------------------------------------------------------------------------
 function template_minimal_func()
 # Description: used for simple functions that do not require a return trap
-# Depends: bashlib,
+# Depends: bashlib
 # API:
 #  $1 -
 #  $2 -
