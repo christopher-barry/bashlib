@@ -644,7 +644,7 @@ function log_debug_noise_filter()
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
-function log_update_debug_filter_regex()
+function log_debug_update_filter_regex()
 # Description: change and instantiate a new filter in the debug filter coproc
 # Depends: bashlib
 # API:

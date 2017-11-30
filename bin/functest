@@ -161,7 +161,7 @@ function __main__()
 ##------------------------------------------------------------------------------
 
 # dump everything through logging filter for testing purposes
-log_update_debug_filter_regex ".*log_error[[:blank:]]0[[:blank:]].*" ".*trap.*" ".*E=.*" ".*xtrace.*" ".*dbgstate=.*" ".*_debug_.*" ".*return[[:blank:]].*"
+log_debug_update_filter_regex ".*log_error[[:blank:]]0[[:blank:]].*" ".*trap.*" ".*E=.*" ".*xtrace.*" ".*dbgstate=.*" ".*_debug_.*" ".*return[[:blank:]].*"
 
 # source file if needed
 [[ "${1}" == "-i" ]] && {
