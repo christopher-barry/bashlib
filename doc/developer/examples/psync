@@ -92,7 +92,7 @@ case "${1}" in
 esac
 
 # initialize logging, debug, and program subsystems
-log_init; log_debug_init; _params="${@}"; prog-init
+session-init; log_init; log_debug_init; _params="${@}"; prog-init
 
 # builtin help
 show_help "${@}"
@@ -104,7 +104,7 @@ show_help "${@}"
 declare _self_="${0}"
 
 # base network
-ip_network="192.168.1."
+ip_network="192.168.111."
 
 # domain name
 dns_domain=infinux.org
