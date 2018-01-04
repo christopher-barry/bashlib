@@ -96,36 +96,56 @@
 #     C  O  N  F  I  G  U  R  A  T  I  O  N     A  N  D     S  E  T  U  P      #
 ################################################################################
 
-# for functesting
-:<<'EOF'
+:<<EOF
 
 # bash 4.2+ or bail
 check_bash_version || exit 1
-# conifgs
+
 config /etc/bashlib/base.cfg
+#config /etc/bashlib/${0##*/}.cfg
 config ~/.config/bashlib/base.cfg
+#config ~/.config/bashlib/${0##*/}.cfg
+#config ${0%/*}/${0##*/}.cfg
+
 # standard bashlib includes
 import macros
 import logging
 import utilities
-#import net
-#import remote
+# additional bashlib includes.
+# uncomment them to activate.
+#import data_structures
 import math
+#import net
+import parallel
+#import remote
+
 # builtin verbosity levels
 case "${1}" in
     -v|--verbose) _VERBOSE_=true; shift ;;
     -D|--debug)   _DEBUG_=true;   shift ;;
 esac
-# initialize logging, debug, and program subsystems
-log_init; log_debug_init; _params="${@}"; prog-init
+
+_params_="${@}"
+
+# initialize session, logging, debug, and program subsystems
+session-init; log_init; log_debug_init; prog-init
+
 # builtin help
 show_help "${@}"
 
 EOF
 
 ################################################################################
+#        P  R  O  G  R  A  M    C  O  N  F  I  G  U  R  A  T  I  O  N          #
+################################################################################
+
+
+
+################################################################################
 #                 P  R  O  G  R  A  M     B  E  G  I  N  S                     #
 ################################################################################
+
+log_banner centered "${_self_}@session[ ${_session_} ]" | log
 
 #-------------------------------------------------------------------------------
 function n_monkies()
@@ -160,7 +180,7 @@ function n_monkies()
     local _input_file_=
     _input_file_=$(readlink -e "${1}") || { _rtn=${ENO_TRACE} E="${FUNCNAME}: file not found '${1}'"; error-p; }
 
-    seq ${_monkey_n} | env_parallel -j${_monkey_p} functest -i ~/bin/roto-monkey run_random_rotoscope ${_input_file_} svg
+    seq ${_monkey_n} | env_parallel -j${_monkey_p} functest -i roto-monkey run_random_rotoscope ${_input_file_} svg
 
     echo "parallel PID: $$"
 
@@ -231,38 +251,38 @@ function set_random_rotoscope_opts()
         #-output-format filetype
         #"-output-format ${_output_format_:=svg} "
         #-background-color hexvalue_color {none}
-        "-background-color $(gen_random_hex 6) "
+        "-background-color ${BACKGROUND_COLOR:-$(gen_random_hex 6)} "
         #-centerline toggle {outline}
         #"-centerline "
         #-color-count int_colors 1-256 {all colors}
-        "-color-count $(gen_random_int 256) "
+        "-color-count ${COLOR_COUNT:-$(gen_random_int 256)} "
         #-corner-always-threshold int_angle {60}
-        "-corner-always-threshold $(gen_random_int 179) "
+        "-corner-always-threshold ${CORNER_ALWAYS_THRESHOLD:-$(gen_random_int 179)} "
         #-corner-surround int_pixels {4}
-        "-corner-surround $(gen_random_int 10) "
+        "-corner-surround ${CORNER_SURROUND:-$(gen_random_int 10)} "
         #-corner-threshold int_angle {100}
-        "-corner-threshold $(gen_random_int 179) "
+        "-corner-threshold ${CORNER_THESHOLD:-$(gen_random_int 179)} "
         #-despeckle-level int 1-20 {none}
-        "-despeckle-level $(gen_random_int 20) "
+        "-despeckle-level ${DESPECKLE_LEVEL:-$(gen_random_int 20)} "
         #-despeckle-tightness real 0.0-8.0 {2.0}
-        "-despeckle-tightness $(gen_random_float 8 2) "
+        "-despeckle-tightness ${DESPECKLE_TIGHTNESS:-$(gen_random_float 8 2)} "
         #-dpi int {system-dpi}
         #-error-threshold real_pixels {2.0}
-        "-error-threshold $(gen_random_float 2 1) "
+        "-error-threshold ${ERROR_THRESHOLD:-$(gen_random_float 2 1)} "
         #-filter-iterations int {4}
-        "-filter-iterations $(gen_random_int 25) "
+        "-filter-iterations ${FILTER_ITERATIONS:-$(gen_random_int 25)} "
         #-line-reversion-threshold real {0.01}
-        "-line-reversion-threshold $(gen_random_float 1 2) "
+        "-line-reversion-threshold ${LINE_REVERSION_THRESHOLD:-$(gen_random_float 1 2)} "
         #-line-threshold real {1.0}
-        "-line-threshold $(gen_random_float 2 1) "
+        "-line-threshold ${LINE_THRESHOLD:-$(gen_random_float 2 1)} "
         #-preserve-width toggle
         "-preserve-width "
         #-remove-adjacent-corners toggle
         "-remove-adjacent-corners "
-        #-report-progress toggle
-        "-report-progress "
+        #-report-progress toggle (always added now)
+        #"-report-progress "
         #-tangent-surround int {3}
-        "-tangent-surround $(gen_random_int 10) "
+        "-tangent-surround ${TANGENT_SURROUND:-$(gen_random_int 10)} "
         # -width-factor real {none}               <----_option is in manpage, but threw an error when I set it.
         #"-width-factor $(gen_random_float 1 2) " <---'
     )
@@ -273,7 +293,9 @@ function set_random_rotoscope_opts()
     local -i c= _max=
 
     # select random options and use random values in them to create a
-    # unique set of options for this invocation
+    # unique set of options for this invocation. if a global var of
+    # the same name as the option is set, pin value of the option if
+    # selected to that instead of making it random.
     until (( c > _optnum )) || (( _max > ( _optnum * 2 ) ))
     do
         c=$(gen_random_int $(( _optnum + $(gen_random_int 5) )) )
@@ -287,7 +309,7 @@ function set_random_rotoscope_opts()
     done
 
     # output random option set
-    echo "${_random_opts}"
+    echo "${_random_opts} -report-progress"
 
     func-return
 }
@@ -332,21 +354,28 @@ function rotoscope()
 
     # if saving config
     [[ -e ${_cfg_file_} ]] && {
-        cat <<EOF  >> "${_cfg_file_}"
--output-format "${_output_format_}"
--output-file "${_output_file_}"
-"${@}"
-"${_input_file_}"
+        cat <<EOF  >> ${_cfg_file_}
+-output-format ${_output_format_} -output-file ${_output_file_} ${@} ${_input_file_}
 EOF
     }
 
-    log_fd 2 "${FUNCNAME}: -output-format ${_output_format_} -output-file ${_output_file_} ${@} ${_input_file_}"
+    #log_fd 2 "${FUNCNAME}: -output-format ${_output_format_} -output-file ${_output_file_} ${@} ${_input_file_}"
+    log_fd 2 "${FUNCNAME}: -output-format ${_output_format_}  ${@} ${_input_file_}"
 
+    #mkfifo ${_output_file_}
+
+    #( convert ${_output_file_} ${_output_file_%%.*}.png && touch ${_output_file_%%.*}.done || touch ${_output_file_%%.*}.failed ) &
+
+    #-output-file ${_output_file_} \
     autotrace -output-format ${_output_format_} \
-              -output-file ${_output_file_} \
               ${@} \
               ${_input_file_}
 
+    #until [[ -e  ${_output_file_%%.*}.done || -e ${_output_file_%%.*}.failed ]]; do
+    #    sleep 1
+    #done
+    #[[ -e  ${_output_file_%%.*}.failed ]] && { log_fd 2 "error converting image"; rm -f ${_output_file_} ${_output_file_%%.*}.{done,failed}; error-f; }
+    #rm -f ${_output_file_} ${_output_file_%%.*}.{done,failed}
 
     func-return
 }
@@ -483,7 +512,7 @@ function ascii_to_png()
 -color-count 14 -corner-always-threshold 90 -corner-surround 8 -corner-threshold 11 -error-threshold 1.8 -filter-iterations 4 -line-threshold 1.2 -preserve-width -remove-adjacent-corners -tangent-surround 5
 /home/cbarry/tmp/roto/pitch_number-5/00005317.jpg
 
-output-format svg
+-output-format svg
 -output-file /home/cbarry/tmp/roto/pitch_number-5/a61d7999-620e-4d94-b23e-6002bb5a0d1d.svg
 -color-count 71 -corner-always-threshold 41 -despeckle-level 20 -error-threshold 1.7 -report-progress
 /home/cbarry/tmp/roto/pitch_number-5/00005317.jpg
@@ -508,5 +537,21 @@ output-format svg
 -color-count 133 -despeckle-level 15 -error-threshold 1.4 -report-progress
 /home/cbarry/tmp/roto/pitch_number-5/00005317.jpg
 
+
+#overlays a.jpg@50% opacity over b.jpg into result.jpg
+composite -blend 50 a.jpg b.jpg result.jpg
+
+# ImageMagick commands
+animate
+compare
+composite
+conjure
+convert
+display
+identify
+import
+mogrify
+montage
+stream
 
 EOF
