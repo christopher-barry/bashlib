@@ -224,31 +224,31 @@ function log_error()
     is_function ${FUNCNAME[_funcidx_]} && {
         # handle function scope errors
         log "Error: ${_msg_}"
-        log " |-Function: ${FUNCNAME[_funcidx_]}[${_errcode_}]"
-        log " |-Invoked@: $(evar "${_caller^^}_INVOKED"):$(evar "${_caller^^}_LINENO")"
+        log " $(echo -ne "\u2523")Function: ${FUNCNAME[_funcidx_]}[${_errcode_}]"
+        log " $(echo -ne "\u2523")Invoked@: $(evar "${_caller^^}_INVOKED"):$(evar "${_caller^^}_LINENO")"
         # dump the function's local environment, if available.
         (( $(evar "#_${_caller}_env[@]") > 0 )) && {
-            log " |-Environment: local@${_caller}"
+            log " $(echo -ne "\u2523")Environment: local@${_caller}"
             local -i i= _varnum=$(evar \#_${_caller}_env[@])
             for (( i = 0; i < _varnum ; i++ )); do
                 (( i == (_varnum - 1) )) && {
-                    log " |   \`-$(evar "_${_caller}_env[i]")"
+                    log " $(echo -ne "\u2503")   $(echo -ne "\u2517")$(evar "_${_caller}_env[i]")"
                 } || {
-                    log " |   |-$(evar "_${_caller}_env[i]")"
+                    log " $(echo -ne "\u2503")   $(echo -ne "\u2523")$(evar "_${_caller}_env[i]")"
                 }
             done
         }
         [[ "$(evar "${_caller^^}_DEFINED")" ]] && {
             local _def_lineno=$(grep --line-number "^function ${_caller}" $(evar "${_caller^^}_DEFINED") || echo "unknown")
         }
-        log " |-Defined@: $(evar "${_caller^^}_DEFINED"):${_def_lineno%:*}"
-        log " \`-Stack   : ${_rstack[@]/%/ ->} ${_caller}()"
+        log " $(echo -ne "\u2523")Defined@: $(evar "${_caller^^}_DEFINED"):${_def_lineno%:*}"
+        log " $(echo -ne "\u2517")Stack   : ${_rstack[@]/%/ $(echo -ne "\u279c")} ${_caller}()"
     } || {
         # handle program scope errors
         log "Error: ${_msg_}"
-        log " |-Program : ${0##*/}[${_errcode_}]"
-        log " |-Invoked@: $(evar "${_caller^^}_INVOKED"):$(evar "${_caller^^}_LINENO")"
-        log " \`-Stack   : ${_rstack[@]/%/ ->} self()"
+        log " $(echo -ne "\u2523")Program : ${0##*/}[${_errcode_}]"
+        log " $(echo -ne "\u2523")Invoked@: $(evar "${_caller^^}_INVOKED"):$(evar "${_caller^^}_LINENO")"
+        log " $(echo -ne "\u2517")Stack   : ${_rstack[@]/%/ $(echo -ne "\u279c")} self()"
     }
 
     # uncomment '^log.*$' lines for help debugging index issues
@@ -573,9 +573,9 @@ function log_debug_init()
 
     # turn on subsecond timestamps if set
     [[ ${DEBUG_TIMESTAMP^^} =~ TRUE|YES|ON|1 ]] && {
-        PS4='+$(log_jiffies)[${LINENO}]:${FUNCNAME:+${FUNCNAME}(): }'
+        PS4='$(echo -ne "\u279c")$(log_jiffies)[${LINENO}]:${FUNCNAME:+${FUNCNAME}(): }'
     } || {
-        PS4='+[${LINENO}]:${FUNCNAME:+${FUNCNAME}(): }'
+        PS4='$(echo -ne "\u279c")[${LINENO}]:${FUNCNAME:+${FUNCNAME}(): }'
     }
 
     # log_fd writes to a specific file descriptor ('4' in this case)
