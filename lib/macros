@@ -1,6 +1,6 @@
 # -*- mode: sh; -*-
 # Library: various macro aliases
-# Dependencies: base.cfg
+# Dependencies: base.cfg bashlib
 # Author: Christopher Barry
 # License: GPLv2 or later
 # Depends: bashlib awk mkdir id rm
@@ -14,14 +14,16 @@
 # function definition, and make global changes simpler. For standard
 # function init and return/exit code, they can do things that using
 # another function there just can't do. Their beauty is that they
-# exist and execute in their containing function's scope, and don't
-# define a new, nested scope of their own, yet you can nest them for
-# reusability and structure, and still maintain a flat scope!  Sure,
-# they can't accept parameters, but they can embed variable names that
-# can actually reflect a local variable in the function they are
-# executing in. They're nifty, useful, and I really like 'em.
+# exist and execute in their containing program's or function's scope,
+# and don't define a new, nested scope of their own, yet you can nest
+# them for reusability, modularity, and structure, all while still
+# maintaining a flat scope!  Sure, they can't accept parameters, but
+# they can embed variable names that can actually reflect a local
+# variable in the function they are executing in. They're nifty,
+# useful, and I really like 'em. once you grok their true value,
+# you'll dig 'em too.
 
-# ...and you thought they were little more than: alias ll='ls -la'
+# ...and you thought they were just for: alias ll='ls -la'
 
 # Their naming convention in bashlib is always hyphen-separated
 # lowercase-words. This separates them easily in the codebase, and
@@ -30,73 +32,70 @@
 # this option allows aliases non-interactively.
 shopt -s expand_aliases
 
-
 : BEGIN MACRO DEFINITIONS
+
+# rebrand...
+alias macro='alias'
 
 #---[ d e b u g ]-------------------------------------------------------
 
-alias debug-get-state-prog='declare _dbgstate=$(log_debug_get_state); log_debug_control'
+macro debug-get-state-prog='declare _dbgstate=$(log_debug_get_state); log_debug_control'
 
-alias debug-set-state-prog='log_debug_set_state ${_dbgstate}'
+macro debug-set-state-prog='log_debug_set_state ${_dbgstate}'
 
 
-alias debug-get-state-func='local _dbgstate=$(log_debug_get_state); log_debug_control'
+macro debug-get-state-func='local _dbgstate=$(log_debug_get_state); log_debug_control'
 
-alias debug-set-state-func='log_debug_set_state ${_dbgstate}'
+macro debug-set-state-func='log_debug_set_state ${_dbgstate}'
 
 ##----------------------------------------------------------------------
 
 
 #---[ d e f a u l t   m e s s a g e s ]---------------------------------
 
-alias prog-init-messages='declare _err="Error:" _warn="Warning:" E="${_self_}: ${_params_} failed"'
+macro prog-init-messages='declare _err="Error:" _warn="Warning:" E="${_self_}: ${_params_} failed"'
 
-alias prog-return-messages='get-return-status; E=${E:-"${_err} ${_self_}: ${_params_} failed"}'
+macro prog-exit-messages='get-return-status; E=${E:-"${_err} ${_self_}: ${_params_} failed"}'
 
 
-alias func-init-messages='local _err="Error:" _warn="Warning:" E="${FUNCNAME}: ${_params_} failed"'
+macro func-init-messages='local _err="Error:" _warn="Warning:" E="${FUNCNAME}: ${_params_} failed"'
 
-alias func-return-messages='get-return-status; E=${E:-"${_err} ${FUNCNAME}: ${_params_} failed"}'
+macro func-return-messages='get-return-status; E=${E:-"${_err} ${FUNCNAME}: ${_params_} failed"}'
 
 ##----------------------------------------------------------------------
 
 
 #---[ t r a p s ]-------------------------------------------------------
 
-alias prog-trap='trap "log_error \${_rtn:-\${?}} 1 \${E}" EXIT'
+macro prog-trap='trap "log_error \${_rtn:-\${?}} 1 \${E}" EXIT'
 
 
-alias func-trap='trap "log_error \${_rtn:-\${?}} 1 \${E}" RETURN'
+macro func-trap='trap "log_error \${_rtn:-\${?}} 1 \${E}" RETURN'
 
 ##----------------------------------------------------------------------
 
 
 #---[ i n f o r m a t i o n ]-------------------------------------------
 
-alias this-name='_this_=${FUNCNAME:-${0##*/}}; _this_=${_this_//[[:punct:]]/_}'
+macro this-name='_this_=${FUNCNAME:-${0##*/}}; _this_=${_this_//[[:punct:]]/_}'
 
-alias this-source='declare -g ${_this_^^}_DEFINED="${BASH_SOURCE:-${SCRIPT_SOURCE}}"'
+macro this-source='declare -g ${_this_^^}_DEFINED="${BASH_SOURCE:-${SCRIPT_SOURCE}}"'
 
-alias this-line-number='declare -g ${_this_^^}_LINENO="${BASH_LINENO:-1}"'
+macro this-line-number='declare -g ${_this_^^}_LINENO="${BASH_LINENO:-1}"'
 
-alias this-invoked='declare -g ${_this_^^}_INVOKED="${BASH_SOURCE[1]:-${SCRIPT_SOURCE}}"'
+macro this-invoked='declare -g ${_this_^^}_INVOKED="${BASH_SOURCE[1]:-${SCRIPT_SOURCE}}"'
 
 # define func-named vars for each invoked function
-alias this-info='this-name; this-source; this-line-number; this-invoked'
+macro this-info='this-name; this-source; this-line-number; this-invoked'
 
 ##----------------------------------------------------------------------
 
 
-#---[ i n i t ]---------------------------------------------------------
-
-#alias _-init-_=
-
-
 #---[ s e s s i o n ]---------------------------------------------------
 
-alias this-script-fullpath='SCRIPT_SOURCE="${0}"'
+macro this-script-fullpath='SCRIPT_SOURCE="${0}"'
 
-alias this-script-name='_self_="${0##*/}"'
+macro this-script-name='_self_="${0##*/}"'
 
 # allow maintaining a known session id using WITH_SESSION, along with
 # KEEP_RUNDIR to make data structures persistent across program
@@ -108,9 +107,9 @@ alias this-script-name='_self_="${0##*/}"'
 # use the specified session directory. however, the session directory
 # will go away by default at user logout or system reboot because it is
 # on a volatile memory filesystem by default.
-alias this-session='_session_=${WITH_SESSION:-$(gen_uuid)}'
+macro this-session='_session_=${WITH_SESSION:-$(gen_uuid)}'
 
-alias this-rundir-init='mkdir -p ${_rundir_}'
+macro this-rundir-init='mkdir -p ${_rundir_}'
 
 # to modify _rundir_ to use a non-tmpfs filesystem path (to make any
 # stored application data persistent across reboots), set WITH_RUNDIR
@@ -120,16 +119,16 @@ alias this-rundir-init='mkdir -p ${_rundir_}'
 #
 # the location must be writable by the user running the application.
 #
-alias this-rundir='_rundir_=${WITH_RUNDIR:-/run/user}/$(id -u)/${_self_}/${_session_}'
+macro this-rundir='_rundir_=${WITH_RUNDIR:-/run/user}/$(id -u)/${_self_}/${_session_}'
 
-alias this-struct-root='_structdir_=${_rundir_}/struct'
+macro this-struct-root='_structdir_=${_rundir_}/struct'
 
-alias this-struct-typedefs='_structdefs_=${_structdir_}/typedefs'
+macro this-struct-typedefs='_structdefs_=${_structdir_}/typedefs'
 
-alias this-struct-data='_structdata_=${_structdir_}/data'
+macro this-struct-data='_structdata_=${_structdir_}/data'
 
 # init session for this instance
-alias session-init='this-script-fullpath; this-script-name; this-session; this-rundir; this-rundir-init; this-struct-root; this-struct-typedefs; this-struct-data'
+macro session-init='this-script-fullpath; this-script-name; this-session; this-rundir; this-rundir-init; this-struct-root; this-struct-typedefs; this-struct-data'
 
 ##----------------------------------------------------------------------
 
@@ -137,13 +136,13 @@ alias session-init='this-script-fullpath; this-script-name; this-session; this-r
 #---[ p r o g r a m ]---------------------------------------------------
 
 # init header for programs
-alias prog-init='debug-get-state-prog; this-info; prog-init-messages; prog-trap'
+macro prog-init='debug-get-state-prog; this-info; prog-init-messages; prog-trap'
 
 # composite on-error macro for programs
-alias error-p='prog-return-messages; debug-set-state-prog; remove_macros; remove_rundir; exit ${_rtn}'
+macro error-p='prog-exit-messages; debug-set-state-prog; remove_macros; remove_rundir; exit ${_rtn}'
 
 # exit footer for programs
-alias prog-exit='error-p'
+macro prog-exit='error-p'
 
 ##----------------------------------------------------------------------
 
@@ -151,13 +150,13 @@ alias prog-exit='error-p'
 #---[ f u n c t i o n ]-------------------------------------------------
 
 # init header macro for functions
-alias func-init='debug-get-state-func; this-info; func-init-messages; func-trap'
+macro func-init='debug-get-state-func; this-info; func-init-messages; func-trap'
 
 # composite on-error macro for functions
-alias error-f='func-return-messages; get-env-local; debug-set-state-func; return ${_rtn}'
+macro error-f='func-return-messages; get-env-local; debug-set-state-func; return ${_rtn}'
 
 # return footer macro for functions
-alias func-return='error-f'
+macro func-return='error-f'
 
 ##----------------------------------------------------------------------
 
@@ -165,10 +164,10 @@ alias func-return='error-f'
 #---[ m i n i m a l   f u n c t i o n ]---------------------------------
 
 # special case init header for simple functions
-alias minimal-func-init='debug-get-state-func; this-info'
+macro minimal-func-init='debug-get-state-func; this-info'
 
 # special case return footer for simple functions
-alias minimal-func-return='debug-set-state-func'
+macro minimal-func-return='debug-set-state-func'
 
 ##----------------------------------------------------------------------
 
@@ -176,21 +175,22 @@ alias minimal-func-return='debug-set-state-func'
 #---[ v a l u e   f u n c t i o n ]-------------------------------------
 
 # special case init header for simple functions that need to return specific values
-alias value-func-init='minimal-func-init; trap "log ${FUNCNAME} ${_params_} returned \${_rtn:-\${?}}" RETURN'
+macro value-func-init='minimal-func-init; trap "log ${FUNCNAME} ${_params_} returned \${_rtn:-\${?}}" RETURN'
 
 # special case footer for simple functions that need to return specific values
-alias value-func-return='get-return-status; minimal-func-return; return ${_rtn}'
+macro value-func-return='get-return-status; minimal-func-return; return ${_rtn}'
 
 ##----------------------------------------------------------------------
 
 
 #---[ c o p r o c e s s   f u n c t i o n ]-----------------------------
 
-# special case init header for coproc function: minimal, plus allows deleting an environemnt file on exit
-alias coproc-func-init='minimal-func-init;'
+# special case init header for coproc function: minimal, plus allows deleting an env file on exit
+macro coproc-func-init='minimal-func-init;'
 
-# special case return footer for coproc functions: minimal plus clean up temp env files
-alias coproc-func-return='[[ -f ${_source_env_fn} ]] && rm -f --preserve-root ${_source_env_fn}; minimal-func-return'
+# special case return footer for coproc functions: minimal plus clean up temp env files.
+# note: '_source_env_fn' must be defined prior to running this to actually do cleanup.
+macro coproc-func-return='[[ -f ${_source_env_fn} ]] && rm -f --preserve-root ${_source_env_fn}; minimal-func-return'
 
 ##----------------------------------------------------------------------
 
@@ -198,7 +198,7 @@ alias coproc-func-return='[[ -f ${_source_env_fn} ]] && rm -f --preserve-root ${
 #---[ s t a t u s ]-----------------------------------------------------
 
 # examine the last executed pipeline for error conditions
-alias get-return-status='_rtn=$(get_status)'
+macro get-return-status='_rtn=$(get_status)'
 
 ##----------------------------------------------------------------------
 
@@ -206,61 +206,71 @@ alias get-return-status='_rtn=$(get_status)'
 #---[ e n v i r o n m e n t   d u m p i n g   t o o l s ]---------------
 
 # dump alias names defined in the environment
-alias get-env-alias-names='alias |  awk -F= "{ print \$1 }" | awk -F[[:blank:]] "{ print \$2 }"'
+macro get-env-alias-names='alias |  awk -F= "{ print \$1 }" | awk -F[[:blank:]] "{ print \$2 }"'
 
 # dump indexed array names defined in the environment
-alias get-env-array-names='declare -a | awk -F= "{ print \$1 }" | awk -F[[:blank:]] "{ print \$3 }"'
+macro get-env-array-names='declare -a | awk -F= "{ print \$1 }" | awk -F[[:blank:]] "{ print \$3 }"'
 
 # dump exported names defined in the environment
-alias get-env-exported-names='declare -x | awk -F= "{ print \$1 }" | awk -F[[:blank:]] "{ print \$3 }"'
+macro get-env-exported-names='declare -x | awk -F= "{ print \$1 }" | awk -F[[:blank:]] "{ print \$3 }"'
 
 # dump function names defined in the environment
-alias get-env-function-names='declare -F | awk -F[[:blank:]] "{ print \$3 }"'
+macro get-env-function-names='declare -F | awk -F[[:blank:]] "{ print \$3 }"'
 
 # dump associative array names defined in the environment
-alias get-env-hash-names='declare -A | awk -F= "{ print \$1 }" | awk -F[[:blank:]] "{ print \$3 }"'
+macro get-env-hash-names='declare -A | awk -F= "{ print \$1 }" | awk -F[[:blank:]] "{ print \$3 }"'
 
 # dump integer names defined in the environment
-alias get-env-integer-names='declare -i | awk -F= "{ print \$1 }" | awk -F[[:blank:]] "{ print \$3 }"'
+macro get-env-integer-names='declare -i | awk -F= "{ print \$1 }" | awk -F[[:blank:]] "{ print \$3 }"'
 
 # dump readonly names defined in the environment
-alias get-env-readonly-names='declare -r | awk -F= "{ print \$1 }" | awk -F[[:blank:]] "{ print \$3 }"'
+macro get-env-readonly-names='declare -r | awk -F= "{ print \$1 }" | awk -F[[:blank:]] "{ print \$3 }"'
 
 # dump regular var names defined in the environment
-alias get-env-regular-names='declare -p | awk -F= "{ print \$1 }" | grep "^declare[[:blank:]][\-]\{2\}[[:blank:]].*$" | awk "{ print \$3 }"'
+macro get-env-regular-names='declare -p | awk -F= "{ print \$1 }" | grep "^declare[[:blank:]][\-]\{2\}[[:blank:]].*$" | awk "{ print \$3 }"'
 
 # generate an array of all set local variables
-alias get-env-local='readarray _${FUNCNAME}_env < <(local|grep -v '^E=.*$')'
+macro get-env-local='readarray _${FUNCNAME}_env < <(local|grep -v '^E=.*$')'
 
 # tests if a piped-in symbol name exits in the local env
-alias is-local='[[ "$(local | grep "^$(cat -)=" | awk -F= "{print $1}")" ]]'
+macro is-local='[[ "$(local | grep "^$(get_stdin)=" | awk -F= "{print $1}")" ]]'
 
 # tests if a piped-in symbol name exits in the global env
-alias is-global='[[ "$(typeset | grep "^$(cat -)=" | awk -F= "{print $1}")" ]]'
+macro is-global='[[ "$(typeset | grep "^$(get_stdin)=" | awk -F= "{print $1}")" ]]'
 
 ##----------------------------------------------------------------------
 
 
 #---[ d a t a s t r u c t u r e   i n s t a n t i a t i o n ]-----------
 
-# set _structure, then run retrieve-records:
-#   local _structure=${_name_}   # assign target structure name to embedded alias variable
+# set _structure, then run <action>-records:
+#   local _structure=${_name_}   # assign target structure name to embedded macro variable
 #   retrieve-records             # source each record's value
+#   list-records                 # list each defined record and value
 #
-# record variables have form: ${structurename_recordname}
-#
-# instantiate records
-alias retrieve-records='local _rec; for _rec in $(find ${_structdata_}/${_structure} -type f -name "*_value"); do source ${_rec}; done'
+# record variables have form: ${_structure}_recordname
+
+# Remember: unlike functions, aliases will instantiate the records in
+# the current scope, not in a nested scope that will vanish when the
+# function terminates. Therefore, it is no longer necessary to make
+# everything global to get around that problem.
+
+# instantiate records from storage
+macro retrieve-records='declare _rec; for _rec in $(find ${_structdata_}/${_structure} -type f -name "*_value"); do source ${_rec}; done'
+
+# list records currently in memory
+macro list-records='declare _rec=; while read _rec; do echo "${_rec}=$(evar "${_rec}")"; done < <(get-env-regular-names | grep "${_structure}_.*")'
 
 ##----------------------------------------------------------------------
 
 : END MACRO DEFINITIONS
 
+#---[ m a c r o   c o n t r o l ]---------------------------------------
 
 # on every load of this file, automatically create an up-to-date array
 # of all the alias names defined in this file, so they can be
 # destroyed on the way out.
-# this code must be after all the alias definitions
+# this code must be after all the macro definitions
 begin='begin macro defininitions'
 end='end macro defininitions'
 while read line; do
@@ -271,7 +281,7 @@ while read line; do
             state=started
             ;;
         started)
-            [[ ! "${line}" =~ ((^\#.*$)|(^$)) ]] && [[ "${line}" =~ ^alias.*$ ]] && {
+            [[ ! "${line}" =~ ((^\#.*$)|(^$)) ]] && [[ "${line}" =~ ^alias.*$|^macro.*$ ]] && {
                 MACRO_NAMES+=( $(echo "${line}" | awk '{print $2}' | awk -F= '{print $1}') )
             }
             ;;
@@ -288,3 +298,7 @@ function remove_macros() { shopt -u expand_aliases; unalias ${MACRO_NAMES[@]} &>
 
 # called to remove unique temp work area
 function remove_rundir() { (( KEEP_RUNDIR )) || { [[ -d ${_rundir_} ]] &&  rm --preserve-root -rf ${_rundir_}; }; }
+
+##----------------------------------------------------------------------
+
+:
