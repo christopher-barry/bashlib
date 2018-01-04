@@ -9,18 +9,18 @@
 ################################################################################
 
 # see lib/macros::retrieve-records for the macro that instantiates
-# variables from structures
+# variables from structures, and see lib/macros::retrieve-records for
+# the macro that displays instantiated records.
 
 #-------------------------------------------------------------------------------
 function typedef()
 # Description: creates/deletes a structured data type-definition
 # Depends: bashlib
 # API:
-# switches: <-c|--create type_name> [-i|--inherit existing_type_name]  <record_type:record_name[:validator_funcname]> ...
-#           <-d|--delete type_name>
-#     -c type name
-#     [-i existing-type to inherit]
-#     $@ - record <type>:<name>[:validator] list, where: (in create mode only)
+# switches:
+#     <-c|--create type_name> [-i|--inherit existing_type_name]  <record_type:record_name[:validator_funcname]> ...
+#     <-d|--delete type_name>
+#     $@ - record format :-  <type>:<name>[:validator] list (in 'create' mode only)
 #         <type> is one of:
 #            'A' for associative_array
 #            'a' for indexed_array
@@ -152,11 +152,11 @@ function typedef()
 
                 for p in "${@}"; do
 
-                    # create a temporary array of ('type' 'name'
-                    # 'validator') from each record spec parameter
+                    # create a temporary array of ('type' 'name' 'validator')
+                    # from each record spec parameter
                     local -a _tnv=( ${p//:/ } )
 
-                    (( ${#_tnv[@]} > 1 )) && (( ${#_tnv[@]} < 4 )) || { _rtn=1 E="invalid record defnition: '${p}'"; error-f; }
+                    verify_argc ${#_tnv[@]} 2 3 || { _rtn=1 E="${_err} ${FUNCNAME}: invalid record defnition: '${p}'"; error-f; }
 
                     is_word ${_tnv[1]} || { _rtn=1 E="bad record name '${_tnv[1]}', may only contain letter, number and '_' characters"; error-f; }
 
@@ -574,13 +574,14 @@ function _dehydrate()
 
             done < <(cat ${_structdata_}/${_name_}/${_rname_}/${_rname_}_validator)
 
+
             case ${_rtype_} in
 
                 A) # hash
 
-                    local v=
                     >${_structdata_}/${_name_}/${_rname_}/${_rname_}_value
 
+                    local v=
                     for v in $(evar "!${_name_}_${_rname_}[@]"); do
                         echo "declare -A ${_name_}_${_rname_}[${v}]=\"$(evar "${_name_}_${_rname_}[${v}]")\"" \
                              >>${_structdata_}/${_name_}/${_rname_}/${_rname_}_value
@@ -590,9 +591,9 @@ function _dehydrate()
 
                 a) # array
 
-                    local v=
                     >${_structdata_}/${_name_}/${_rname_}/${_rname_}_value
 
+                    local v=
                     for v in $(evar "!${_name_}_${_rname_}[@]"); do
                         echo "declare -a ${_name_}_${_rname_}[${v}]=\"$(evar "${_name_}_${_rname_}[${v}]")\"" \
                              >>${_structdata_}/${_name_}/${_rname_}/${_rname_}_value
@@ -602,21 +603,15 @@ function _dehydrate()
 
                 b|f|s) # bool,float,string (no declare type)
 
-                    local v=
-                    >${_structdata_}/${_name_}/${_rname_}/${_rname_}_value
-
                     echo "declare ${_name_}_${_rname_}=\"$(evar "${_name_}_${_rname_}")\"" \
-                         >>${_structdata_}/${_name_}/${_rname_}/${_rname_}_value
+                         >${_structdata_}/${_name_}/${_rname_}/${_rname_}_value
 
                     ;;
 
                 h|i) # hex,integer
 
-                    local v=
-                    >${_structdata_}/${_name_}/${_rname_}/${_rname_}_value
-
                     echo "declare -i ${_name_}_${_rname_}=\"$(evar "${_name_}_${_rname_}")\"" \
-                         >>${_structdata_}/${_name_}/${_rname_}/${_rname_}_value
+                         >${_structdata_}/${_name_}/${_rname_}/${_rname_}_value
 
                     ;;
                 *)
