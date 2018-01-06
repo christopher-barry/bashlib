@@ -49,7 +49,7 @@ function _test_typedef()
 #-------------------------------------------------------------------------------
 function _test_new()
 # Description: tests the new function
-# Depends: bashlib,
+# Depends: bashlib
 # API:
 # Inputs:
 # Outputs:
@@ -74,7 +74,7 @@ function _test_new()
 #-------------------------------------------------------------------------------
 function _test_store_structure()
 # Description: take the current in-memory record state and write to storage
-# Depends: bashlib,
+# Depends: bashlib
 # API:
 # Inputs:
 # Outputs:
@@ -98,7 +98,7 @@ function _test_store_structure()
 #-------------------------------------------------------------------------------
 function test_structure_functions()
 # Description: drive the various structure functions
-# Depends: bashlib,
+# Depends: bashlib
 # API:
 # Inputs:
 # Outputs:

@@ -1,6 +1,6 @@
 # -*- mode: sh; -*-
 # Library: various utility functions
-# Dependencies: base.cfg, macros, logging
+# Dependencies: bashlib foobar
 # Author: Christopher Barry
 # License: GPLv2 or later
 #
@@ -89,7 +89,24 @@ function get_depends()
     local _params="${@}"
     minimal-func-init
 
-    grep -r '\# Depends: ' ${IPATH//:/ } | awk '{print substr($0,index($0,$3))}' | sed 's/ /\n/g' | sort -u
+    local _i=
+    local -a _depends=()
+
+    _depends=( $(for _i in ${IPATH//:/ }; do grep -r '^# Depends: .*$' ${_i} 2>/dev/null | awk -F: '{print substr($0,index($0,$3))}' | sed 's/ /\n/g'; done  | sort -u) )
+
+    local _p=
+    local -a _missing=()
+    for _p in "${_depends[@]}"; do
+        [[ "${_p}" == "bashlib" ]] || {
+            which ${_p} &>/dev/null || _missing+=( ${_p} )
+        }
+    done
+
+    (( ${#_missing[@]} )) && {
+        log_fd 2 "Warning: the following dependent programs are missing:"
+        log_fd 2 " $(tput setaf 3)${_missing[@]}$(tput sgr0)"
+        log_fd 2 "and must be available for full bashlib functionality"
+    }
 
     minimal-func-return
 }

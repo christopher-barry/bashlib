@@ -94,7 +94,7 @@ show_help "${@}"
 #-------------------------------------------------------------------------------
 function cs_get_filelist()
 # Description: get list of files from dirs on commanline
-# Depends: bashlib,
+# Depends: bashlib
 # API:
 #  [<$1 $2> -m|--maxdepth depth]
 #  $@ - dir1 [dir2 ... dirN]
@@ -125,7 +125,7 @@ function cs_get_filelist()
 #-------------------------------------------------------------------------------
 function cs_test_syntax()
 # Description: test syntax of script with bash
-# Depends: bashlib,
+# Depends: bashlib
 # API:
 #  $1 - file to test
 # Inputs: full path to filename
@@ -167,7 +167,7 @@ function cs_test_syntax()
 #-------------------------------------------------------------------------------
 function cs_main()
 # Description: main function
-# Depends: bashlib,
+# Depends: bashlib
 # API:
 #  [$1 $2] - [<-m|--maxdepth> depth]
 #  $@ - directory(s)

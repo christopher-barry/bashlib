@@ -1,6 +1,6 @@
 # -*- mode: sh; -*-
 # Library: debug and logging functions
-# Dependencies: base.cfg, macros
+# Dependencies: bashlib
 # Author: Christopher Barry
 # License: GPLv2 or later
 #

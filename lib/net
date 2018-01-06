@@ -1,6 +1,6 @@
 # -*- mode: sh; -*-
 # Library: ipv4 network helpers and verifiers
-# Dependencies: base.cfg, macros, logging, utilities
+# Dependencies: bashlib
 # Authors: Christopher Barry
 # License: GPLv2 or later
 #
@@ -11,7 +11,7 @@
 #-------------------------------------------------------------------------------
 function get_default_router()
 # Description: get the ip address of the default router
-# Depends: bashlib iproute2 grep
+# Depends: bashlib ip grep
 # API:
 #  n/a
 # Inputs:
@@ -36,7 +36,7 @@ function get_default_router()
 #-------------------------------------------------------------------------------
 function get_default_interface()
 # Description: get the local interface attached to the default router
-# Depends: bashlib iproute2 grep
+# Depends: bashlib ip grep
 # API:
 #  n/a
 # Inputs:
@@ -61,7 +61,7 @@ function get_default_interface()
 #-------------------------------------------------------------------------------
 function get_default_interface_ip()
 # Description: get the default local interface ip address
-# Depends: bashlib iproute2 grep
+# Depends: bashlib ip grep
 # API:
 #  n/a
 # Inputs:

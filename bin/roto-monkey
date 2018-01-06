@@ -24,7 +24,7 @@
 #
 #   As an attempt at an alternative, and to potentially discover a
 #   roto-scoped look that was not previously considered, roto-monkey
-#   was devloped. roto-monkey is designed to run in the background,
+#   was developed. roto-monkey is designed to run in the background,
 #   randomly selecting options and values to produce modified images
 #   from a single seed image.
 #
@@ -150,7 +150,7 @@ log_banner centered "${_self_}@session[ ${_session_} ]" | log
 #-------------------------------------------------------------------------------
 function n_monkies()
 # Description: run multiple monkey processes simulataneously
-# Depends: bashlib, parallel, env_parallel, nproc, readlink
+# Depends: bashlib parallel env_parallel nproc readlink
 # API:
 #  $1 - input file(s)
 #  $2 - output format
@@ -164,7 +164,7 @@ function n_monkies()
 #  0 on success
 #  1 on failure
 # Examples:
-#   n_monkies 6 15 mycmd arg1 ... argn
+#   echo "mycmd arg1 ... argn" | n_monkies 6 15
 #-
 {
     local _params="${@}"
@@ -186,13 +186,12 @@ function n_monkies()
 
     func-return
 }
-
 ##------------------------------------------------------------------------------
 
 #-------------------------------------------------------------------------------
 function run_random_rotoscope()
 # Description: run rotoscope on a single image with randomly generated params
-# Depends: bashlib, autotrace, readlink
+# Depends: bashlib autotrace readlink
 # API:
 #  $1 - input file
 #  $2 - output filetype {svg}
@@ -227,7 +226,7 @@ function run_random_rotoscope()
 #-------------------------------------------------------------------------------
 function set_random_rotoscope_opts()
 # Description: recreate the opts array with new, random values each cycle.
-# Depends: bashlib, autotrace
+# Depends: bashlib autotrace
 # API:
 #  [$1] - output format [eps|{svg}|dxf|pdf]
 # Inputs:   optional output format
@@ -318,7 +317,7 @@ function set_random_rotoscope_opts()
 #-------------------------------------------------------------------------------
 function rotoscope()
 # Description:
-# Depends: bashlib, autotrace
+# Depends: bashlib autotrace
 # API:
 #  $1 - input file
 #  $2 - output format
@@ -384,7 +383,7 @@ EOF
 #-------------------------------------------------------------------------------
 function video_to_images()
 # Description: slice a video into consecutive stills
-# Depends: bashlib, mplayer
+# Depends: bashlib mplayer
 # API:
 #  $1 - video file
 #  $2 - output format (jpeg, png, bmp, etc.)
@@ -421,7 +420,7 @@ function video_to_images()
 #-------------------------------------------------------------------------------
 function jpeg_to_ascii()
 # Description:
-# Depends: bashlib, jp2a
+# Depends: bashlib jp2a
 # API:
 #  $1 - width {174}
 #  $@ - list of jpeg files to process
@@ -456,8 +455,11 @@ function jpeg_to_ascii()
 
 #-------------------------------------------------------------------------------
 function ascii_to_png()
-# Description: parse ascii image rendition into png
-# Depends: bashlib, python3
+# Description: parse ascii image rendition into png. There are other
+#              dependencies as well as below, such as PIL, the Python
+#              Image Library, which are less simple to detect reliably
+#              across distros.
+# Depends: bashlib python3
 # API:
 #  $@ - list of ascii image files to process
 # Inputs:
@@ -497,13 +499,8 @@ function ascii_to_png()
 }
 ##------------------------------------------------------------------------------
 
-
-
-
-
-
 # exit macro
-# prog-exit
+prog-exit
 
 :<<EOF
 

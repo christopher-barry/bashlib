@@ -1,7 +1,7 @@
 #!/bin/bash
 # -*- mode: sh; -*-
 # install: install bashlib
-# Dependencies: macros logging utilities
+# Dependencies: bashlib
 # Authors: Christopher Barry
 # License: GPLv2 or later
 #
@@ -828,6 +828,8 @@ function install_execute()
         _rtn=0
         error-f
     }
+
+    try get_depends
 
     try install_to "${PREFIX}" ${INSTALL_TARGET} ||  { _rtn=1; error-f; }
 

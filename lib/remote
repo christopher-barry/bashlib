@@ -1,6 +1,6 @@
 # -*- mode: sh; -*-
 # Library: remote access and scripting helper functions
-# Dependencies: base.cfg, macros, logging, utilities
+# Dependencies: bashlib
 # Author: Christopher Barry
 # License: GPLv2 or later
 #

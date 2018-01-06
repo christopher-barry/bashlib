@@ -1,7 +1,8 @@
 #!/bin/bash
 # -*- mode: sh; -*-
 # psync: pull data from your phone to your desktop
-# Dependencies: bashlib, passwordless ssh setup (using keys), rsync
+# Dependencies: bashlib rsync
+# Note: requires passwordless ssh setup using keys
 # Authors: Christopher Barry
 # License: GPLv2 or later
 #

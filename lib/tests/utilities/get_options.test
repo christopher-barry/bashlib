@@ -2,7 +2,7 @@
 #-------------------------------------------------------------------------------
 function test_get_options()
 # Description: exercise the get_options function
-# Depends: bashlib,
+# Depends: bashlib
 # API:
 #  $1 - executable_name
 #  $2 - long_opt_array_name

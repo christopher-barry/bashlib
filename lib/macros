@@ -1,6 +1,6 @@
 # -*- mode: sh; -*-
 # Library: various macro aliases
-# Dependencies: base.cfg bashlib
+# Dependencies: bashlib
 # Author: Christopher Barry
 # License: GPLv2 or later
 # Depends: bashlib awk mkdir id rm

@@ -1,6 +1,6 @@
 # -*- mode: sh; -*-
 # Library: various data structure functions
-# Dependencies: base.cfg, macros, logging, utilities
+# Dependencies: bashlib
 # Author: Christopher Barry
 # License: GPLv2 or later
 #
@@ -500,7 +500,7 @@ function _dehydrate()
 # Note:
 #  Generally run via the store_record() function rather than directly
 #
-# Depends: bashlib,
+# Depends: bashlib
 # API:
 #  $1 - object type (currently only 'struct' is supported)
 #  $2 - object name
