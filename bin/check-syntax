@@ -15,7 +15,7 @@
 #   check-syntax [[-v|--verbose]|[-D|--debug]] [<-m|--maxdepth> depth] dir [dir2 .. dirN]
 #
 # DESCRIPTION
-#   parses all shell scriptss in specified directory(s) looking for
+#   parses all shell scripts in specified directory(s) looking for
 #   syntax errors.
 # FEATURES
 #
@@ -65,6 +65,7 @@ check_bash_version || exit 1
 
 config /etc/bashlib/base.cfg
 config ~/.config/bashlib/base.cfg
+config ~/.config/bashlib/${0##*/}.cfg
 
 # standard bashlib includes
 import macros
@@ -115,7 +116,7 @@ function cs_get_filelist()
         -m|--maxdepth) local _depth_=${2}; shift 2 ;;
     esac
 
-    find "${@}" ${_depth_:+-maxdepth ${_depth_}} -type f
+    find "${@}" ${_depth_:+-maxdepth ${_depth_}} -type f | egrep -v "${EXT_EXCLUDES_REGEX}"
 
     minimal-func-return
     return 0
