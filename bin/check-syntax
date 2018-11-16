@@ -47,6 +47,12 @@
 #   base.cfg contains basic configuration environmental variables, and
 #   instantates all library functions.
 #
+#   ~/.config/bashlib/check-syntax.cfg contains vars specific to this program.
+#     You must create this file yourself to use it.
+#     Exclude specific extensions from the syntax check:
+#       EXT_EXCLUDES_REGEX='^.*\.txt$|^.*\.ext2$|^.*\.extN$'
+#
+#
 # EXIT STATUS
 #
 # AUTHORS
@@ -148,15 +154,16 @@ function cs_test_syntax()
     is_sourceable "${1}" && {
         _rslt=$(bash -n "${1}" 2>&1)
         [[ -z ${_rslt} ]] && {
-            log "PASSED:   ${1}"
+            log "[PASS] ${1}"
             _rtn=0
         } || {
-            log "FAILED:   ${1} had the following error(s):"
+            log "[FAIL] ${1} had the following error(s):"
             log "${_rslt}"
-            E= _rtn=${ENO_TRACE}
+            E=
+	    _rtn=${ENO_TRACE}
         }
     } || {
-        log "SKIPPING: ${1}"
+        log "[SKIP] ${1}"
         _rtn=0
     }
 
