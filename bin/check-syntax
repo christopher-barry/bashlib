@@ -12,7 +12,7 @@
 #
 # SYNOPSIS
 #   check-syntax [-h|--help]
-#   check-syntax [[-v|--verbose]|[-D|--debug]] [<-m|--maxdepth> depth] dir [dir2 .. dirN]
+#   check-syntax [-v|--verbose] [<-m|--maxdepth> <depth>] dir [dir2 .. dirN]
 #
 # DESCRIPTION
 #   parses all shell scripts in specified directory(s) looking for
@@ -21,14 +21,11 @@
 #
 # OPTIONS
 #   BUILTINS
-#     [[-v|--verbose]|[-D|--debug]]
+#     [[-v|--verbose]]
 #       Controls extended output verbosity level.
 #       MUST be the FIRST parameter to have any effect.
 #         -v|--verbose
 #           writes logs to screen and ~/log/program-name.log
-#         -D|--debug
-#           outputs xtrace data to ~/log/program-name.debug
-#           and enables --verbose output as well.
 #
 #     [-h | --help]
 #       Display basic and full usage information respectively and exit.
@@ -36,6 +33,11 @@
 #   PROGRAM SPECIFIC
 #     [<-m|--maxdepth> depth]
 #       Search this many dirs below dirs specified. Defaults to all dirs.
+#
+#     ~/.config/bashlib/check-syntax.cfg contains vars specific to this program.
+#       You must create this file yourself to use it.
+#       Exclude specific extensions from the syntax check:
+#         EXT_EXCLUDES_REGEX='^.*\.txt$|^.*\.ext2$|^.*\.extN$'
 #
 # EXAMPLES
 #   check-syntax --verbose --maxdepth 1 /usr/src/scripts
@@ -46,12 +48,6 @@
 # ENVIRONMENT
 #   base.cfg contains basic configuration environmental variables, and
 #   instantates all library functions.
-#
-#   ~/.config/bashlib/check-syntax.cfg contains vars specific to this program.
-#     You must create this file yourself to use it.
-#     Exclude specific extensions from the syntax check:
-#       EXT_EXCLUDES_REGEX='^.*\.txt$|^.*\.ext2$|^.*\.extN$'
-#
 #
 # EXIT STATUS
 #
@@ -97,6 +93,11 @@ show_help "${@}"
 ################################################################################
 #                 P  R  O  G  R  A  M     B  E  G  I  N  S                     #
 ################################################################################
+
+R=$(tput setaf 1)
+G=$(tput setaf 2)
+L=$(tput setaf 4)
+N=$(tput sgr0)
 
 #-------------------------------------------------------------------------------
 function cs_get_filelist()
@@ -154,16 +155,16 @@ function cs_test_syntax()
     is_sourceable "${1}" && {
         _rslt=$(bash -n "${1}" 2>&1)
         [[ -z ${_rslt} ]] && {
-            log "[PASS] ${1}"
+            log "[${G}PASS${N}] ${1}"
             _rtn=0
         } || {
-            log "[FAIL] ${1} had the following error(s):"
+            log "[${R}FAIL${N}] ${1} had the following error(s):"
             log "${_rslt}"
             E=
 	    _rtn=${ENO_TRACE}
         }
     } || {
-        log "[SKIP] ${1}"
+        log "[${L}SKIP${N}] ${1}"
         _rtn=0
     }
 
@@ -206,6 +207,9 @@ function cs_main()
     func-return
 }
 ##------------------------------------------------------------------------------
+
+log "Currently excluding: EXT_EXCLUDES_REGEX=${EXT_EXCLUDES_REGEX}"
+log "set in ~/.config/bashlib/check-syntax.cfg"
 
 cs_main "${@}"
 
